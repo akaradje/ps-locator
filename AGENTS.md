@@ -16,12 +16,14 @@
 1. **ห้ามแก้ไขข้อมูลสถานีทุกกรณี** — `data/stations.js` และ `data/stations.json` เป็นข้อมูลยืนยันจาก ตร. แล้ว การอัปเดตข้อมูลทำได้ผ่านขั้นตอนในหัวข้อ 6 เท่านั้น (รันสคริปต์จากข้อมูลดิบต้นทางใหม่ ไม่ใช่แก้มือ)
 2. **ห้ามแต่งเติมข้อมูล** — ฟิลด์ที่ต้นทางไม่มี (45 สถานี) ต้องแสดง “ไม่มีข้อมูล” ห้ามเดาที่อยู่/เบอร์/เว็บไซต์
 3. **ห้ามเพิ่ม dependency / build step / framework** — เว็บต้องเปิดผ่าน static server ได้ทันทีโดยไม่ติดตั้งอะไร
-4. **ห้ามเปลี่ยนคีย์ localStorage** (`ps:saved`, `ps:theme`) และ **URL params** (`q`, `province`, `region`, `sort`, `page`) — ผู้ใช้มีข้อมูลบันทึกและลิงก์แชร์ค้างอยู่
+4. **ห้ามเปลี่ยนคีย์ localStorage** (`ps:saved`, `ps:theme`) และ **URL params** (`q`, `province`, `region`, `sort`, `page`) — ผู้ใช้มีข้อมูลบันทึกและลิงก์แชร์ค้างอยู่ · ตัวเลือก `#sortBy` ถูกเอาออกจากหน้าเว็บแล้ว แต่ `state.sort` และพารามิเตอร์ `sort` **ต้องยังอ่านได้** เพื่อรักษาลิงก์เก่า
 5. **ข้อความ UI ทั้งหมดเป็นภาษาไทย** — ตรวจทานก่อน commit ทุกครั้ง ห้ามมีคำภาษาอื่นปน (จีน เวียดนาม ญี่ปุ่น ฯลฯ) ในข้อความที่ผู้ใช้เห็น รวมถึง README/CHANGELOG/release notes
-6. **ระบบพิมพ์ A4 และ CSV ต้องทำงานเสมอ** — เป็นฟีเจอร์หลักที่ผู้ใช้พึ่งพา (พิมพ์แนบคดี, CSV เปิด Excel ภาษาไทยไม่เพี้ยนด้วย BOM)
+6. **ระบบพิมพ์ A4 และ CSV ต้องทำงานเสมอ** — เป็นฟีเจอร์หลักที่ผู้ใช้พึ่งพา (พิมพ์แนบคดี, CSV เปิด Excel ภาษาไทยไม่เพี้ยนด้วย BOM) · งานพิมพ์ **ห้ามมีช่องลงชื่อและบรรทัดแหล่งข้อมูล** (ตัดออกตามคำขอผู้ใช้ 16 พ.ย. 2569) เหลือเพียง “พิมพ์จาก PS Locator · วันที่พิมพ์ …”
 7. **รองรับสองธีม (สว่าง/มืด) ทุกคอมโพเนนต์ใหม่** — ใช้ CSS variables เท่านั้น ห้าม hardcode สี และตรวจ contrast ทั้งสองธีม
 8. **Accessibility เป็นข้อบังคับ** — คีย์บอร์ดครบ, aria ถูกต้อง, เคารพ `prefers-reduced-motion`, focus trap ในโมดัล
-9. การ commit/push/tag/release: ทำเมื่อผู้ใช้สั่งเท่านั้น — และใช้ author เดิมของ repo (`Monoia <35655438+akaradje@users.noreply.github.com>`) ผ่าน `git -c user.name=... -c user.email=...` ห้ามแก้ git config ของเครื่อง
+9. **ขอบเขตโปรเจกต์ = สารบบสถานีตำรวจเพียงอย่างเดียว** — ฟีเจอร์ “เขตอำนาจการสอบสวนจากชื่อตำบล / ปักหมุดที่เกิดเหตุ / ย่อประกาศราชกิจจานุเบกษา” ถูกตัดออกทั้งชุดตามคำขอผู้ใช้ 17 พ.ย. 2569 (รวม `data/jurisdictions.js`, `docs/gazette/`, สคริปต์ Python, พารามิเตอร์ `j`/`pin`/`jtab` และคีย์ `ps:scene`) · **ห้ามนำกลับมา** เว้นแต่ผู้ใช้สั่งชัดเจน · ประกาศเขตอำนาจต้องตรวจจากต้นฉบับทางการเท่านั้น
+10. **Release เก่าห้ามแก้** — notes และไฟล์แนบของ `v1.0.0` / `v1.1.0` คงเดิมถาวร เพื่อให้ย้อนกลับได้จริง · ทุก release ใหม่ต้องแนบ zip snapshot + ระบุ SHA256 ใน notes
+11. การ commit/push/tag/release: ทำเมื่อผู้ใช้สั่งเท่านั้น — และใช้ author เดิมของ repo (`Monoia <35655438+akaradje@users.noreply.github.com>`) ผ่าน `git -c user.name=... -c user.email=...` ห้ามแก้ git config ของเครื่อง
 
 ## 3. โครงสร้างไฟล์
 
@@ -53,10 +55,13 @@ README.md               คู่มือภาพรวม
 - **region ids:** `bkk` (บช.น.), `p1`…`p9` (ภ.1–ภ.9) — ลำดับ/ชื่อแสดงอยู่ใน `REGIONS`
 - **การค้นหา:** `norm()` = NFC + lowercase + ตัด “สถานีตำรวจ/สน./สภ.” + ลบช่องว่าง/วรรคตอน · ดัชนี `HAY` (Map ต่อ id: name/addr/prov/phone/region ที่ normalize แล้ว) **สร้างครั้งเดียวตอน boot** — ห้ามกลับไป normalize ซ้ำทุกรอบพิมพ์
 - **สถานะ:** object `state` เดียว (q, province, region, sort, page, savedOnly) — `renderResults()` คือท่อหลัก: นับ → chips → active filters → innerHTML การ์ด → stagger → pagination → `syncURL()` (history.replaceState)
+- **ตัวเลือกเรียงลำดับ (`#sortBy`) ถูกเอาออกจากหน้าเว็บแล้ว** ตามคำขอผู้ใช้ · `state.sort`, `getFiltered()` และพารามิเตอร์ `sort` ใน URL **ยังอยู่** เพื่อรักษาลิงก์แชร์เก่า · โค้ดที่อ้าง `#sortBy` ต้องใช้ optional chaining/null-check เสมอ · `resetFilters()` คือจุดคืนค่า `state.sort = 'region'` · **ห้ามนำ dropdown นี้กลับมา** เว้นแต่ผู้ใช้ขอ
 - **คำแนะนำค้นหา:** จัดอันดับ ชื่อขึ้นต้น(0) → ชื่อมีคำ(1) → จังหวัด(2) → ที่อยู่(3) → เบอร์/ภาค(4), สูงสุด 8 รายการ · ไฮไลต์ด้วย `hl()` (escape ทีละส่วน ปลอดภัยจาก XSS)
 - **ธีม:** `html[data-theme]` + `applyTheme()` · inline script ใน head ตั้งธีมก่อน paint · ถ้าไม่มีค่าที่บันทึกไว้ให้ตาม `prefers-color-scheme` (listener ทำงานเฉพาะเมื่อผู้ใช้ยังไม่เคยเลือก)
-- **โมดัล:** focus trap (Tab วนในกล่อง), Esc ปิด, คลิก overlay ปิด, คืนโฟกัสจุดเดิม · เปิดจาก suggestion ต้องปิด suggestion ก่อนเสมอ
-- **พิมพ์:** `printStation()` / `printFilteredList()` — ตราสัญลักษณ์ SVG + หัว/ท้ายกระดาษราชการ + วันที่ไทย + ช่องลงชื่อ · `@page A4 margin 14mm 13mm` · บังคับ `color-scheme: light` ตอนพิมพ์
+- **โมดัล:** focus trap (Tab วนในกล่อง), Esc ปิด, คลิก overlay ปิด, คืนโฟกัสจุดเดิม · เปิดจาก suggestion ต้องปิด suggestion ก่อนเสมอ · `.modal` เป็น flex column → `.modal-head`/`.modal-foot` ตรึง, `.modal-body` เลื่อนเอง · ปุ่ม `#dCopy` ต้องเป็น btn-primary ลำดับแรกใน `.modal-foot`
+- **พิมพ์:** `printStation()` / `printFilteredList()` — ตราสัญลักษณ์ SVG + หัวกระดาษราชการ + ท้ายใบ “พิมพ์จาก PS Locator · วันที่พิมพ์ …” · **ไม่มีช่องลงชื่อ / ไม่มีบรรทัดแหล่งข้อมูล / ไม่มี “หน้า 1 / 1”** · `@page A4 margin 14mm 13mm` · บังคับ `color-scheme: light` ตอนพิมพ์
+- **คัดลอก:** `stationCopyText()` = ชื่อสถานี + ที่อยู่ + โทรศัพท์ — **ไม่มีแฟกซ์** · ต้องเก็บ `e.currentTarget` ไว้ในตัวแปรก่อนเข้า async callback ไม่งั้น feedback “คัดลอกแล้ว” จะไม่แสดง
+- **URL:** `syncURL()` ต้องต่อ `window.location.hash` กลับเข้า `history.replaceState` เสมอ
 - **CSV:** UTF-8 + BOM literal นำหน้าเสมอ
 - **pitfall ที่เคยเจอ (อย่าทำซ้ำ):**
   - CSS grid auto-placement: item ที่กำหนด row ชัดแต่ column auto จะถูกจัดก่อน item auto อื่น → กำหนด `grid-column/grid-row` ชัดทุกส่วนย่อย
@@ -91,7 +96,7 @@ git diff v1.0.0 HEAD -- data/     # ต้องว่างเปล่า — 
 
 - [ ] ค้นหา + suggestions + คีย์บอร์ด ↑↓/Enter/Esc/Tab + คลิกเลือก → โมดัลถูกต้อง
 - [ ] Combobox จังหวัด: พิมพ์กรอง/จำนวน/คีย์บอร์ด/คลิกนอกปิด · ชิปกองบัญชาการ + จำนวน
-- [ ] เรียงลำดับ · แบ่งหน้า · ล้างตัวกรอง · เฉพาะที่บันทึก
+- [ ] แบ่งหน้า · ล้างตัวกรอง (ต้องคืน `state.sort` กลับเป็น `region`) · เฉพาะที่บันทึก · **ต้องไม่มีตัวเลือก “เรียง:” ในแถบค้นหา** · ลิงก์เก่า `?sort=name` ยังแสดงลำดับเดิมได้
 - [ ] ธีมมืด/สว่าง: สลับ/จำค่าข้ามรีโหลด/ตามค่าระบบ/meta theme-color · ไม่มีจอวาบ
 - [ ] Mini-search ซิงค์สองทาง · ปุ่มกลับขึ้นบน
 - [ ] โมดัล: แผนที่ embed/โทร/นำทาง/คัดลอก+feedback/พิมพ์/บันทึก · Esc · focus trap
@@ -99,6 +104,7 @@ git diff v1.0.0 HEAD -- data/     # ต้องว่างเปล่า — 
 - [ ] URL params: รีโหลดแล้วตัวกรองอยู่ครบ · แชร์ลิงก์เปิดได้ผลเดิม
 - [ ] **console errors = 0** · ไม่มีการทับซ้อน/ล้น/ตกจอ · ข้อมูล data/ ไม่ถูกแก้
 - [ ] ข้อความ UI เป็นไทยล้วน ไม่มีคำภาษาอื่นปน
+- [ ] **ไม่มีเศษโค้ดของฟีเจอร์เขตอำนาจ/ปักหมุดที่เกิดเหตุ** — สแกน `jurisdiction`, `jurParams`, `ps:scene`, `jtab`, `incident-map`, `JURISDICTION`, `gazette`, `ปักหมุด` ต้องไม่พบ (ยกเว้น `#sortBy` แบบ guarded)
 
 ## 8. ขั้นตอน Release + Rollback (ทำเมื่อผู้ใช้สั่ง)
 
@@ -110,14 +116,20 @@ git -c user.name=Monoia -c user.email=35655438+akaradje@users.noreply.github.com
 git -c user.name=Monoia -c user.email=35655438+akaradje@users.noreply.github.com tag -a vX.Y.Z -m "..."
 # 4) push
 git push origin main --tags
-# 5) zip snapshot สำหรับ deploy/rollback
+# 5) zip snapshot สำหรับ deploy/rollback (เฉพาะไฟล์ที่ commit แล้ว — ตรวจเนื้อหาก่อนแนบเสมอ)
 git archive --format=zip -o ps-locator-vX.Y.Z.zip vX.Y.Z
-# 6) release notes ภาษาไทยละเอียดสุด: ฟีเจอร์ใหม่/ปรับปรุง/แก้บั๊ก/การทดสอบ/หมายเหตุข้อมูล/วิธี deploy/วิธีย้อนกลับ
+sha256sum ps-locator-vX.Y.Z.zip    # ใส่ค่าใน release notes
+# 6) release notes ภาษาไทยละเอียดสุด: สรุปภาพรวม/เพิ่ม/เปลี่ยนแปลง/ตัดออก/แก้ไข/หมายเหตุข้อมูล/
+#    การทดสอบ/วิธี deploy/วิธีย้อนกลับ/ประวัติทุกเวอร์ชัน/SHA256
 gh release create vX.Y.Z --title "..." --notes-file notes.md ps-locator-vX.Y.Z.zip
+# 7) ตรวจว่า release เก่ายังอยู่ครบ (ห้ามแก้ notes หรือ asset ของ release เก่า)
+gh release list --repo akaradje/ps-locator
 ```
 
 - เวอร์ชัน: ฟีเจอร์ UI ใหม่ = minor · อัปเดตข้อมูล = minor ขึ้นไปพร้อมระบุชัด · แก้บั๊กเล็กน้อย = patch
-- **Rollback 3 ทาง:** (1) ดาวน์โหลด zip ของ release เก่า → อัปโหลดทับใน Cloudflare Dashboard (~1 นาที, แนะนำ) (2) `git checkout vX.Y.Z` หรือ `git revert <commit>` (3) `git archive` จาก tag แล้ว deploy
+- **Rollback 3 ทาง:** (1) ดาวน์โหลด zip ของ release ที่ต้องการ (`v1.2.0` / `v1.1.0` / `v1.0.0`) → อัปโหลดทับใน Cloudflare Dashboard (~1 นาที, แนะนำ) (2) `git checkout <tag>` หรือ `git revert <commit>` (3) `git archive --format=zip ... <tag>` แล้ว deploy
+- **ตรวจสอบความสมบูรณ์ก่อน deploy:** เปรียบเทียบ SHA256 ของ zip ที่ดาวน์โหลดกับค่าที่ระบุใน release notes
+- **Release เก่า = จุดย้อนกลับ:** อย่าแก้ `--notes`, อย่าลบ/แทนที่ asset ของ `v1.0.0` / `v1.1.0` · ถ้าต้องการรายละเอียดเพิ่ม ให้เขียนรวมไว้ใน notes ของ release ใหม่แทน
 - Deploy จริง: Cloudflare Dashboard → Workers & Pages → Upload your static files → Deploy (ทำในบัญชี Cloudflare ของผู้ดูแล — agent ทำให้ไม่ได้)
 - หลัง deploy: ตรวจเว็บจริง + แนะนำรัน Lighthouse ซ้ำ แล้วอัปเดต `PROJECT_STATUS.md`
 

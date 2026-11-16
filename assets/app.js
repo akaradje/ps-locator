@@ -348,7 +348,8 @@ function syncURL() {
     if (state.sort !== 'region') p.set('sort', state.sort);
     if (state.page > 1) p.set('page', String(state.page));
     const qs = p.toString();
-    history.replaceState(null, '', qs ? '?' + qs : window.location.pathname);
+    /* คง hash ไว้เสมอ เพื่อไม่ให้ลิงก์ #results / #howto หายตอนซิงก์พารามิเตอร์ */
+    history.replaceState(null, '', (qs ? '?' + qs : window.location.pathname) + window.location.hash);
   } catch { /* file:// or sandbox */ }
 }
 
@@ -361,7 +362,13 @@ function applyURL() {
       if (PROVINCES.some(x => x.name === prov)) { state.province = prov; updateProvinceLabel(); }
     }
     if (p.get('region') && REGIONS.some(r => r.id === p.get('region'))) state.region = p.get('region');
-    if (p.get('sort') && ['region', 'name', 'province'].includes(p.get('sort'))) { state.sort = p.get('sort'); $('#sortBy').value = state.sort; }
+    /* ตัวเลือกเรียงลำดับถูกเอาออกจากหน้าเว็บแล้ว แต่ยังอ่านพารามิเตอร์ sort เดิม
+       เพื่อให้ลิงก์แชร์เก่ายังแสดงลำดับเดิมได้ */
+    if (p.get('sort') && ['region', 'name', 'province'].includes(p.get('sort'))) {
+      state.sort = p.get('sort');
+      const sortSel = $('#sortBy');
+      if (sortSel) sortSel.value = state.sort;
+    }
     const pg = parseInt(p.get('page') || '1', 10);
     if (pg > 0) state.page = pg;
   } catch { /* ignore */ }
@@ -484,6 +491,8 @@ function renderResults() {
 
 function resetFilters() {
   state.q = ''; state.province = ''; state.region = 'all'; state.savedOnly = false; state.page = 1;
+  /* ไม่มีตัวเลือกเรียงลำดับบนหน้าเว็บแล้ว — "ล้างตัวกรองทั้งหมด" คือทางกลับสู่ลำดับปกติ */
+  state.sort = 'region';
   $('#q').value = ''; $('#qMini').value = '';
   updateProvinceLabel();
   closeSuggest();
@@ -521,7 +530,7 @@ function flashCopied(btn) {
   clearTimeout(btn._copyTimer);
   btn._copyTimer = setTimeout(() => { btn.classList.remove('is-copied'); btn.innerHTML = orig; }, 1600);
 }
-const stationCopyText = (st) => `${st.name}\n${st.address}\nโทร ${formatPhoneDisplay(st.phone) || '-'} | แฟกซ์ ${formatPhoneDisplay(st.fax) || '-'}`;
+const stationCopyText = (st) => `${st.name}\n${st.address}\nโทร ${formatPhoneDisplay(st.phone) || '-'}`;
 
 /* ---------- Modal ---------- */
 const modal = $('#stationModal');
@@ -582,11 +591,7 @@ function printHeader(title, subtitle) {
     <div class="print-doc-sub">${esc(subtitle)}</div>`;
 }
 function printFooter() {
-  return `<div class="print-sign">
-      <div><div class="line">ผู้พิมพ์ / ผู้สอบสวน</div>ลงชื่อ ................................................ วันที่ ${esc(thaiDate())}</div>
-      <div><div class="line">ผู้ตรวจสอบ / ผู้บังคับบัญชา</div>ลงชื่อ ................................................ วันที่ ${esc(thaiDate())}</div>
-    </div>
-    <div class="print-foot"><span>พิมพ์จาก ps-locator · ข้อมูล ณ ${esc(thaiDate())} อ้างอิงสำนักงานตำรวจแห่งชาติ (royalthaipolice.go.th)</span><span>หน้า 1 / 1</span></div>
+  return `<div class="print-foot"><span>พิมพ์จาก PS Locator · วันที่พิมพ์ ${esc(thaiDate())}</span></div>
   </div>`;
 }
 function printStation(st) {
@@ -600,7 +605,6 @@ function printStation(st) {
       <tr><th>โทรศัพท์</th><td>${esc(formatPhoneDisplay(st.phone) || '-')}</td></tr>
       <tr><th>โทรสาร (แฟกซ์)</th><td>${esc(formatPhoneDisplay(st.fax) || '-')}</td></tr>
       <tr><th>เว็บไซต์</th><td>${esc(st.website || '-')}</td></tr>
-      <tr><th>แหล่งข้อมูล</th><td>www.royalthaipolice.go.th — เมนู “ข้อมูลสถานีตำรวจ” สำนักงานตำรวจแห่งชาติ (เข้าถึง ${esc(thaiDate())})</td></tr>
     </tbody></table>` +
     printFooter();
   window.print();
@@ -726,7 +730,7 @@ function bindEvents() {
     if (opt) setProvince(opt.dataset.province);
   });
 
-  $('#sortBy').addEventListener('change', (e) => { state.sort = e.target.value; state.page = 1; renderResults(); });
+  $('#sortBy')?.addEventListener('change', (e) => { state.sort = e.target.value; state.page = 1; renderResults(); });
   $('#regionChips').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-region]');
     if (!btn) return;
@@ -790,8 +794,9 @@ function bindEvents() {
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
   $('#dCopy').addEventListener('click', (e) => {
-    const st = STATIONS.find(s => s.id === +e.currentTarget.dataset.id);
-    if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(e.currentTarget));
+    const btn = e.currentTarget;
+    const st = STATIONS.find(s => s.id === +btn.dataset.id);
+    if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(btn));
   });
   $('#dPrint').addEventListener('click', (e) => {
     const st = STATIONS.find(s => s.id === +e.currentTarget.dataset.id);

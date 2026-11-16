@@ -118,11 +118,6 @@
             <ul class="combo-list" id="provinceList" role="listbox" aria-label="รายชื่อจังหวัด"></ul>
           </div>
         </div>
-        <select id="sortBy" aria-label="เรียงลำดับผลลัพธ์">
-          <option value="region">เรียง: ภาค → จังหวัด</option>
-          <option value="name">เรียง: ชื่อสถานี (ก–ฮ)</option>
-          <option value="province">เรียง: จังหวัด (ก–ฮ)</option>
-        </select>
       </form>
 
       <div class="chips" id="quickChips" aria-label="คำค้นยอดนิยม">
@@ -263,17 +258,17 @@
       <div class="map-frame"><iframe id="dMap" title="แผนที่สถานีตำรวจ" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="about:blank"></iframe></div>
     </div>
     <div class="modal-foot">
-      <a class="btn btn-primary" id="dNavigate" href="#" target="_blank" rel="noopener">
+      <button class="btn btn-primary" id="dCopy" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M4 16V5a2 2 0 0 1 2-2h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        คัดลอกที่อยู่
+      </button>
+      <a class="btn btn-outline" id="dNavigate" href="#" target="_blank" rel="noopener">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2 4 22l8-4 8 4-8-20Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
         นำทางใน Google Maps
       </a>
       <button class="btn btn-outline" id="dPrint" type="button">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         พิมพ์รายละเอียด
-      </button>
-      <button class="btn btn-outline" id="dCopy" type="button">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M4 16V5a2 2 0 0 1 2-2h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-        คัดลอกที่อยู่
       </button>
       <button class="btn btn-ghost" id="dSave" type="button" aria-pressed="false">บันทึกสถานีนี้</button>
     </div>
