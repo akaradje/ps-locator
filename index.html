@@ -13,6 +13,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Noto+Serif+Thai:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/styles.css">
+<script>
+(function () {
+  var t = 'light';
+  try { t = localStorage.getItem('ps:theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (e) {}
+  document.documentElement.dataset.theme = t;
+})();
+</script>
 <meta property="og:type" content="website">
 <meta property="og:title" content="PS Locator — สารบบสถานีตำรวจทั่วประเทศ">
 <meta property="og:description" content="ค้นหาที่อยู่ สน./สภ. พร้อมโทรศัพท์ โทรสาร เว็บไซต์ และแผนที่นำทาง ทั่วประเทศไทย อ้างอิงข้อมูลจากสำนักงานตำรวจแห่งชาติ">
@@ -62,13 +69,21 @@
         <span class="brand-tag">สารบบสถานีตำรวจทั่วประเทศไทย</span>
       </span>
     </a>
+    <div class="mini-search" id="miniSearch">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <input type="search" id="qMini" placeholder="ค้นหาสถานีตำรวจ / จังหวัด…" autocomplete="off" spellcheck="false" aria-label="ค้นหาด่วนสถานีตำรวจ">
+    </div>
     <nav class="nav" aria-label="เมนูหลัก">
       <a class="nav-link" href="#results">ค้นหา</a>
       <a class="nav-link" href="#howto">วิธีใช้</a>
       <a class="nav-link" href="#about-sources">แหล่งข้อมูล</a>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="สลับโหมดสว่าง/มืด" aria-pressed="false" title="สลับธีม สว่าง/มืด">
+        <svg class="i-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4 19 19M19 5l-1.6 1.6M6.6 17.4 5 19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <svg class="i-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 13.2A8.1 8.1 0 0 1 10.8 4 8.1 8.1 0 1 0 20 13.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+      </button>
       <button class="btn btn-dark btn-sm" id="printListBtn" type="button" title="พิมพ์บัญชีรายนามสถานีตามตัวกรองปัจจุบัน (A4)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
-        พิมพ์รายงาน
+        <span class="print-label">พิมพ์รายงาน</span>
       </button>
     </nav>
   </div>
@@ -83,12 +98,26 @@
       <p class="lede">ค้นหาสถานีตำรวจครบทุกแห่งทั่วราชอาณาจักร — <b>ที่อยู่สายด่วน โทรศัพท์ โทรสาร เว็บไซต์ และแผนที่นำทาง</b> พร้อมระบุภาคและจังหวัด พิมพ์แนบเอกสารคดีได้ทันที</p>
 
       <form class="searchbox" id="searchForm" role="search">
-        <div class="field">
+        <div class="field" id="searchField">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input type="search" id="q" name="q" placeholder="พิมพ์ชื่อสถานี จังหวัด หรือที่อยู่ เช่น บางรัก, เชียงใหม่, กาญจนบุรี…" autocomplete="off" aria-label="คำค้นหาสถานีตำรวจ" spellcheck="false">
+          <input type="search" id="q" name="q" placeholder="พิมพ์ชื่อสถานี จังหวัด หรือที่อยู่ เช่น บางรัก, เชียงใหม่, กาญจนบุรี…" autocomplete="off" aria-label="คำค้นหาสถานีตำรวจ" aria-autocomplete="list" aria-controls="suggestPanel" aria-expanded="false" spellcheck="false">
           <kbd class="kbd">/</kbd>
+          <div class="suggest" id="suggestPanel" role="listbox" aria-label="คำแนะนำสถานีตำรวจ" hidden></div>
         </div>
-        <select id="provinceFilter" aria-label="กรองตามจังหวัด"><option value="">ทุกจังหวัด (77)</option></select>
+        <div class="combo" id="provinceCombo">
+          <button type="button" class="combo-btn" id="provinceBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="provincePop" aria-label="กรองตามจังหวัด">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>
+            <span class="combo-label" id="provinceLabel">ทุกจังหวัด (77)</span>
+            <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="combo-pop" id="provincePop" hidden>
+            <div class="combo-search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <input type="text" id="provinceSearch" placeholder="พิมพ์ชื่อจังหวัด…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="provinceList" aria-autocomplete="list" aria-label="ค้นหาจังหวัด">
+            </div>
+            <ul class="combo-list" id="provinceList" role="listbox" aria-label="รายชื่อจังหวัด"></ul>
+          </div>
+        </div>
         <select id="sortBy" aria-label="เรียงลำดับผลลัพธ์">
           <option value="region">เรียง: ภาค → จังหวัด</option>
           <option value="name">เรียง: ชื่อสถานี (ก–ฮ)</option>
@@ -149,8 +178,9 @@
       </div>
     </div>
 
-    <div class="active-filters" id="activeFilters" aria-live="polite"></div>
-    <div class="results" id="resultsList" aria-live="polite"></div>
+    <div class="active-filters" id="activeFilters"></div>
+    <p class="sr-only" role="status" id="srStatus"></p>
+    <div class="results" id="resultsList"></div>
     <div class="pager" id="pager" role="navigation" aria-label="เปลี่ยนหน้า"></div>
   </div>
 </main>
@@ -249,6 +279,11 @@
     </div>
   </div>
 </div>
+
+<!-- ════════ BACK TO TOP ════════ -->
+<button class="to-top" id="toTop" type="button" aria-label="กลับขึ้นด้านบน" hidden>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
 
 <!-- ════════ TOAST ════════ -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

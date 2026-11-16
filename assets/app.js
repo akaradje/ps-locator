@@ -20,6 +20,7 @@ const REGIONS = [
 ];
 const REGION_NAME = Object.fromEntries(REGIONS.map(r => [r.id, r.name]));
 const REGION_SHORT = Object.fromEntries(REGIONS.map(r => [r.id, r.short]));
+const REGION_ORDER = Object.fromEntries(REGIONS.map((r, i) => [r.id, i]));
 
 const STATIONS = (window.STATIONS || []).slice();
 const PER_PAGE = 18;
@@ -53,10 +54,29 @@ function norm(s) {
     .replace(/[\s\-‐-―.,()\/\\]+/g, '');
 }
 
+/* Precomputed normalized haystack per station (built once — keeps typing fast). */
+const HAY = new Map();
+for (const st of STATIONS) {
+  HAY.set(st.id, {
+    name: norm(st.name),
+    addr: norm(st.address),
+    prov: norm(st.province_th),
+    phone: norm(st.phone),
+    region: norm(REGION_SHORT[st.region] || ''),
+  });
+}
+
+/* Province list with station counts, sorted ก–ฮ. */
+const PROVINCES = (() => {
+  const m = new Map();
+  for (const st of STATIONS) m.set(st.province_th, (m.get(st.province_th) || 0) + 1);
+  return [...m.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, 'th'));
+})();
+
 function stationMatches(st, qNorm) {
   if (!qNorm) return true;
-  const hay = norm(st.name) + '|' + norm(st.address) + '|' + norm(st.province_th) + '|' + norm(st.phone) + '|' + norm(REGION_SHORT[st.region] || '');
-  return hay.includes(qNorm);
+  const h = HAY.get(st.id);
+  return h.name.includes(qNorm) || h.addr.includes(qNorm) || h.prov.includes(qNorm) || h.phone.includes(qNorm) || h.region.includes(qNorm);
 }
 
 function getFiltered() {
@@ -91,29 +111,128 @@ function formatPhoneDisplay(p) {
 const mapsLink = (st) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(st.name + ' ' + st.address);
 const mapsEmbed = (st) => 'https://www.google.com/maps?q=' + encodeURIComponent(st.name + ' ' + st.address) + '&output=embed';
 
-/* ---------- Populate controls ---------- */
-function populateProvinces() {
-  const sel = $('#provinceFilter');
-  const provinces = [...new Set(STATIONS.map(s => s.province_th))].sort((a, b) => a.localeCompare(b, 'th'));
-  const first = sel.options[0];
-  if (first) first.textContent = `ทุกจังหวัด (${provinces.length})`;
-  for (const p of provinces) {
-    const opt = document.createElement('option');
-    opt.value = p; opt.textContent = p;
-    sel.appendChild(opt);
+/** Escape-safe highlight of the raw query inside a text (exact substring, case-insensitive). */
+function hl(text, qRaw) {
+  const t = String(text ?? '');
+  const needle = String(qRaw ?? '').trim().toLowerCase();
+  if (!needle) return esc(t);
+  const lower = t.toLowerCase();
+  const ranges = [];
+  let idx = lower.indexOf(needle);
+  while (idx !== -1 && ranges.length < 12) {
+    ranges.push([idx, idx + needle.length]);
+    idx = lower.indexOf(needle, idx + needle.length);
   }
+  if (!ranges.length) return esc(t);
+  let out = '', pos = 0;
+  for (const [a, b] of ranges) {
+    out += esc(t.slice(pos, a)) + '<mark>' + esc(t.slice(a, b)) + '</mark>';
+    pos = b;
+  }
+  return out + esc(t.slice(pos));
+}
+
+/* ---------- Theme (light / dark) ---------- */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('ps:theme', t); } catch { /* private mode */ }
+  const btn = $('#themeToggle');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(t === 'dark'));
+    btn.setAttribute('aria-label', t === 'dark' ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด');
+    btn.title = t === 'dark' ? 'โหมดสว่าง' : 'โหมดมืด';
+  }
+  const meta = $('meta[name="theme-color"]');
+  if (meta) meta.content = t === 'dark' ? '#0F141B' : '#F7F6F2';
+}
+
+/* ---------- Province combobox ---------- */
+const comboState = { open: false, active: -1, items: [] };
+
+function renderComboList(filterRaw) {
+  const fn = norm(filterRaw);
+  const opts = [{ value: '', label: 'ทุกจังหวัด', count: STATIONS.length }]
+    .concat(PROVINCES.filter(p => !fn || norm(p.name).includes(fn)).map(p => ({ value: p.name, label: p.name, count: p.count })));
+  comboState.items = opts;
+  comboState.active = -1;
+  const list = $('#provinceList');
+  $('#provinceSearch').removeAttribute('aria-activedescendant');
+  if (!opts.length) { list.innerHTML = '<li class="combo-empty">ไม่พบจังหวัดที่ค้นหา</li>'; return; }
+  list.innerHTML = opts.map((o, i) =>
+    `<li class="combo-opt" role="option" id="prov-${i}" data-province="${esc(o.value)}" aria-selected="${o.value === state.province}"><span>${esc(o.label)}</span><span class="cnt">${o.count.toLocaleString('th-TH')}</span></li>`
+  ).join('');
+}
+
+function moveComboActive(delta) {
+  const rows = $$('.combo-opt', $('#provinceList'));
+  if (!rows.length) return;
+  let next = comboState.active + delta;
+  if (next < 0) next = rows.length - 1;
+  if (next >= rows.length) next = 0;
+  comboState.active = next;
+  rows.forEach((r, i) => r.classList.toggle('active', i === next));
+  rows[next].scrollIntoView({ block: 'nearest' });
+  $('#provinceSearch').setAttribute('aria-activedescendant', rows[next].id);
+}
+
+function openCombo() {
+  comboState.open = true;
+  $('#provincePop').hidden = false;
+  $('#provinceBtn').setAttribute('aria-expanded', 'true');
+  const s = $('#provinceSearch');
+  s.value = '';
+  renderComboList('');
+  s.focus();
+  const sel = $('#provinceList [aria-selected="true"]');
+  if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+
+function closeCombo(refocus = true) {
+  if (!comboState.open) return;
+  comboState.open = false;
+  $('#provincePop').hidden = true;
+  $('#provinceBtn').setAttribute('aria-expanded', 'false');
+  $('#provinceSearch').removeAttribute('aria-activedescendant');
+  if (refocus) $('#provinceBtn').focus();
+}
+
+function setProvince(v) {
+  state.province = v;
+  updateProvinceLabel();
+  closeCombo(true);
+  state.page = 1;
+  renderResults();
+}
+
+/* ---------- Populate controls ---------- */
+function updateProvinceLabel() {
+  $('#provinceLabel').textContent = state.province || `ทุกจังหวัด (${PROVINCES.length})`;
+}
+
+function regionCounts() {
+  const qn = norm(state.q);
+  const counts = { all: 0 };
+  for (const r of REGIONS) if (r.id !== 'all') counts[r.id] = 0;
+  for (const st of STATIONS) {
+    if (!stationMatches(st, qn)) continue;
+    if (state.province && st.province_th !== state.province) continue;
+    if (state.savedOnly && !state.saved.has(st.id)) continue;
+    counts.all++;
+    counts[st.region] = (counts[st.region] || 0) + 1;
+  }
+  return counts;
 }
 
 function renderRegionChips() {
-  const box = $('#regionChips');
-  box.innerHTML = REGIONS.map(r =>
-    `<button class="rchip" type="button" data-region="${esc(r.id)}" aria-pressed="${r.id === state.region}" title="${esc(r.name)}">${esc(r.short)}</button>`
+  const counts = regionCounts();
+  $('#regionChips').innerHTML = REGIONS.map(r =>
+    `<button class="rchip" type="button" data-region="${esc(r.id)}" aria-pressed="${r.id === state.region}" title="${esc(r.name)}">${esc(r.short)}<span class="cnt">${(counts[r.id] || 0).toLocaleString('th-TH')}</span></button>`
   ).join('');
 }
 
 function renderStats() {
   $('#statStations').textContent = STATIONS.length.toLocaleString('th-TH');
-  $('#statProvinces').textContent = new Set(STATIONS.map(s => s.province_th)).size;
+  $('#statProvinces').textContent = PROVINCES.length;
 }
 
 /* ---------- Rendering cards ---------- */
@@ -145,7 +264,7 @@ const icon = {
   check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
-function cardHTML(st) {
+function cardHTML(st, i) {
   const isMetro = st.region === 'bkk';
   const saved = state.saved.has(st.id);
   const typeBadge = isMetro
@@ -156,15 +275,15 @@ function cardHTML(st) {
   const phone = formatPhoneDisplay(st.phone);
   const fax = formatPhoneDisplay(st.fax);
   return `
-  <article class="card ${isMetro ? 'card-type-metro' : ''}" data-id="${st.id}">
+  <article class="card ${isMetro ? 'card-type-metro' : ''}" data-id="${st.id}" style="--i:${Math.min(i, 17)}">
     <div class="card-main">
       <div class="card-toprow">
-        <h3><button class="card-title-btn" data-open-detail="${st.id}" style="all:unset; cursor:pointer; font:inherit; color:inherit">${esc(st.name)}</button></h3>
+        <h3><button class="card-title-btn" type="button" data-open-detail="${st.id}">${hl(st.name, state.q)}</button></h3>
         ${typeBadge}
         <span class="badge badge-region">${esc(REGION_SHORT[st.region] || '-')}</span>
         <span class="verified" title="ข้อมูลยืนยันจากสำนักงานตำรวจแห่งชาติ">${icon.check}ยืนยัน</span>
       </div>
-      <p class="card-addr">${icon.pin}<span>${esc(st.address || 'ไม่มีข้อมูลที่อยู่')}</span></p>
+      <p class="card-addr">${icon.pin}<span>${hl(st.address || 'ไม่มีข้อมูลที่อยู่', state.q)}</span></p>
       <div class="card-meta">
         ${st.phone
           ? `<a class="meta-item" href="tel:${esc(st.phone.replace(/\D/g, ''))}">${icon.phone}<b>${esc(phone)}</b></a>`
@@ -208,9 +327,9 @@ function renderPagination(totalPages, page) {
 function renderActiveFilters() {
   const box = $('#activeFilters');
   const tags = [];
-  if (state.q) tags.push({ label: `ค้นหา: “${state.q}”`, clear: () => { state.q = ''; $('#q').value = ''; } });
-  if (state.province) tags.push({ label: `จังหวัด: ${state.province}`, clear: () => { state.province = ''; $('#provinceFilter').value = ''; } });
-  if (state.region !== 'all') tags.push({ label: REGION_NAME[state.region], clear: () => { state.region = 'all'; renderRegionChips(); } });
+  if (state.q) tags.push({ label: `ค้นหา: “${state.q}”`, clear: () => { state.q = ''; $('#q').value = ''; $('#qMini').value = ''; } });
+  if (state.province) tags.push({ label: `จังหวัด: ${state.province}`, clear: () => { state.province = ''; updateProvinceLabel(); } });
+  if (state.region !== 'all') tags.push({ label: REGION_NAME[state.region], clear: () => { state.region = 'all'; } });
   if (state.savedOnly) tags.push({ label: 'เฉพาะที่บันทึก', clear: () => { state.savedOnly = false; $('#toggleSavedOnly').setAttribute('aria-pressed', 'false'); } });
   box.innerHTML = tags.map((t, i) => `<span class="filter-tag">${esc(t.label)}<button type="button" data-clear="${i}" aria-label="ล้างตัวกรองนี้">✕</button></span>`).join('');
   box.querySelectorAll('[data-clear]').forEach(btn => btn.addEventListener('click', () => {
@@ -236,10 +355,10 @@ function syncURL() {
 function applyURL() {
   try {
     const p = new URLSearchParams(window.location.search);
-    if (p.get('q')) { state.q = p.get('q'); $('#q').value = state.q; }
+    if (p.get('q')) { state.q = p.get('q'); $('#q').value = state.q; $('#qMini').value = state.q; }
     if (p.get('province')) {
       const prov = p.get('province');
-      if ([...$('#provinceFilter').options].some(o => o.value === prov)) { state.province = prov; $('#provinceFilter').value = prov; }
+      if (PROVINCES.some(x => x.name === prov)) { state.province = prov; updateProvinceLabel(); }
     }
     if (p.get('region') && REGIONS.some(r => r.id === p.get('region'))) state.region = p.get('region');
     if (p.get('sort') && ['region', 'name', 'province'].includes(p.get('sort'))) { state.sort = p.get('sort'); $('#sortBy').value = state.sort; }
@@ -248,6 +367,88 @@ function applyURL() {
   } catch { /* ignore */ }
 }
 
+/* ---------- Live search suggestions ---------- */
+const sugState = { items: [], active: -1, total: 0 };
+
+function getSuggestions(qRaw) {
+  const qn = norm(qRaw);
+  if (!qn) return { items: [], total: 0 };
+  const scored = [];
+  let total = 0;
+  for (const st of STATIONS) {
+    const h = HAY.get(st.id);
+    let score = -1;
+    if (h.name.startsWith(qn)) score = 0;
+    else if (h.name.includes(qn)) score = 1;
+    else if (h.prov.includes(qn)) score = 2;
+    else if (h.addr.includes(qn)) score = 3;
+    else if (h.phone.includes(qn) || h.region.includes(qn)) score = 4;
+    if (score >= 0) { scored.push({ st, score }); total++; }
+  }
+  scored.sort((a, b) => a.score - b.score || a.st.name.localeCompare(b.st.name, 'th'));
+  return { items: scored.slice(0, 8), total };
+}
+
+function renderSuggest() {
+  const qRaw = $('#q').value.trim();
+  const panel = $('#suggestPanel');
+  const input = $('#q');
+  if (!qRaw) { closeSuggest(); return; }
+  const { items, total } = getSuggestions(qRaw);
+  sugState.items = items;
+  sugState.total = total;
+  sugState.active = -1;
+  input.removeAttribute('aria-activedescendant');
+  if (!items.length) {
+    panel.innerHTML = `<div class="sug-empty">ไม่พบสถานีที่ตรงกับ “${esc(qRaw)}” — ลองใช้คำค้นที่สั้นลง</div>`;
+  } else {
+    const rows = items.map((it, i) => {
+      const st = it.st;
+      return `<div class="sug-row" role="option" id="sug-${i}" data-sug="${st.id}" aria-selected="false">
+        <span class="sug-name">${hl(st.name, qRaw)}</span>
+        <span class="sug-phone">${esc(formatPhoneDisplay(st.phone) || '—')}</span>
+        <span class="sug-sub">${esc(st.province_th)} · ${esc(REGION_SHORT[st.region] || '-')}</span>
+      </div>`;
+    }).join('');
+    panel.innerHTML = `<div class="suggest-list">${rows}</div>
+      <div class="sug-foot"><span>จับคู่ได้ ${total.toLocaleString('th-TH')} สถานี</span><button type="button" id="sugAll">ดูผลลัพธ์ทั้งหมด →</button></div>`;
+  }
+  panel.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+}
+
+function closeSuggest() {
+  const panel = $('#suggestPanel');
+  panel.hidden = true;
+  sugState.active = -1;
+  $('#q').setAttribute('aria-expanded', 'false');
+  $('#q').removeAttribute('aria-activedescendant');
+}
+
+function moveSugActive(delta) {
+  const rows = $$('.sug-row', $('#suggestPanel'));
+  if (!rows.length) return;
+  let next = sugState.active + delta;
+  if (next < 0) next = rows.length - 1;
+  if (next >= rows.length) next = 0;
+  sugState.active = next;
+  rows.forEach((r, i) => r.setAttribute('aria-selected', String(i === next)));
+  rows[next].scrollIntoView({ block: 'nearest' });
+  $('#q').setAttribute('aria-activedescendant', rows[next].id);
+}
+
+function applySearch(qRaw) {
+  const v = String(qRaw ?? '');
+  state.q = v.trim();
+  $('#q').value = v;
+  $('#qMini').value = v;
+  state.page = 1;
+  closeSuggest();
+  renderResults();
+  $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- Results ---------- */
 function renderResults() {
   const list = getFiltered();
   const total = list.length;
@@ -257,9 +458,12 @@ function renderResults() {
   const pageItems = list.slice(start, start + PER_PAGE);
 
   $('#resultCount').textContent = total.toLocaleString('th-TH');
+  $('#srStatus').textContent = `พบ ${total.toLocaleString('th-TH')} สถานี` + (totalPages > 1 ? ` · หน้า ${state.page} จาก ${totalPages}` : '');
+  renderRegionChips();
   renderActiveFilters();
 
   const container = $('#resultsList');
+  container.classList.remove('animate');
   if (!pageItems.length) {
     container.innerHTML = `
       <div class="empty">
@@ -270,16 +474,21 @@ function renderResults() {
       </div>`;
     $('#emptyReset')?.addEventListener('click', resetFilters);
   } else {
-    container.innerHTML = pageItems.map(cardHTML).join('');
+    container.innerHTML = pageItems.map((st, i) => cardHTML(st, i)).join('');
   }
+  void container.offsetWidth;
+  container.classList.add('animate');
   renderPagination(totalPages, state.page);
   syncURL();
 }
 
 function resetFilters() {
   state.q = ''; state.province = ''; state.region = 'all'; state.savedOnly = false; state.page = 1;
-  $('#q').value = ''; $('#provinceFilter').value = ''; $('#toggleSavedOnly').setAttribute('aria-pressed', 'false');
-  renderRegionChips();
+  $('#q').value = ''; $('#qMini').value = '';
+  updateProvinceLabel();
+  closeSuggest();
+  closeCombo(false);
+  $('#toggleSavedOnly').setAttribute('aria-pressed', 'false');
   renderResults();
 }
 
@@ -293,15 +502,26 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
 }
 async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); showToast('คัดลอกลงคลิปบอร์ดแล้ว'); }
+  try { await navigator.clipboard.writeText(text); showToast('คัดลอกลงคลิปบอร์ดแล้ว'); return true; }
   catch {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); showToast('คัดลอกลงคลิปบอร์ดแล้ว'); } catch { showToast('คัดลอกไม่สำเร็จ'); }
+    let ok = false;
+    try { ok = document.execCommand('copy'); showToast(ok ? 'คัดลอกลงคลิปบอร์ดแล้ว' : 'คัดลอกไม่สำเร็จ'); } catch { showToast('คัดลอกไม่สำเร็จ'); }
     ta.remove();
+    return ok;
   }
 }
+function flashCopied(btn) {
+  if (!btn) return;
+  const orig = btn.innerHTML;
+  btn.classList.add('is-copied');
+  btn.innerHTML = icon.check + 'คัดลอกแล้ว';
+  clearTimeout(btn._copyTimer);
+  btn._copyTimer = setTimeout(() => { btn.classList.remove('is-copied'); btn.innerHTML = orig; }, 1600);
+}
+const stationCopyText = (st) => `${st.name}\n${st.address}\nโทร ${formatPhoneDisplay(st.phone) || '-'} | แฟกซ์ ${formatPhoneDisplay(st.fax) || '-'}`;
 
 /* ---------- Modal ---------- */
 const modal = $('#stationModal');
@@ -310,6 +530,7 @@ let lastFocus = null;
 function openStationModal(id) {
   const st = STATIONS.find(s => s.id === id);
   if (!st) return;
+  closeSuggest();
   lastFocus = document.activeElement;
   $('#modalRegion').textContent = REGION_NAME[st.region] || '';
   $('#modalTitle').textContent = st.name;
@@ -426,31 +647,96 @@ function exportCSV() {
   showToast(`ดาวน์โหลด CSV แล้ว (${list.length} รายการ)`);
 }
 
+/* ---------- Scroll UI: mini-search + back-to-top ---------- */
+function initScrollUI() {
+  const header = $('.header');
+  const field = $('#searchField');
+  if ('IntersectionObserver' in window && field) {
+    const io = new IntersectionObserver(([entry]) => {
+      header.classList.toggle('searching', !entry.isIntersecting);
+    }, { rootMargin: '-72px 0px 0px 0px', threshold: 0 });
+    io.observe(field);
+  }
+  const toTop = $('#toTop');
+  toTop.hidden = false;
+  const onScroll = () => toTop.classList.toggle('show', window.scrollY > 600);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+}
+
 /* ---------- Events ---------- */
 let searchDebounce;
 function bindEvents() {
-  $('#q').addEventListener('input', (e) => {
+  const q = $('#q');
+  const qMini = $('#qMini');
+
+  q.addEventListener('input', (e) => {
+    const v = e.target.value;
+    qMini.value = v;
+    renderSuggest();
     clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => { state.q = e.target.value.trim(); state.page = 1; renderResults(); }, 120);
+    searchDebounce = setTimeout(() => { state.q = v.trim(); state.page = 1; renderResults(); }, 140);
   });
-  $('#provinceFilter').addEventListener('change', (e) => { state.province = e.target.value; state.page = 1; renderResults(); });
+  qMini.addEventListener('input', (e) => {
+    const v = e.target.value;
+    q.value = v;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { state.q = v.trim(); state.page = 1; renderResults(); }, 140);
+  });
+
+  q.addEventListener('keydown', (e) => {
+    const panel = $('#suggestPanel');
+    const open = !panel.hidden;
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) renderSuggest(); else moveSugActive(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (open) moveSugActive(-1); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (open && sugState.active >= 0 && sugState.items[sugState.active]) openStationModal(sugState.items[sugState.active].st.id);
+      else applySearch(q.value);
+    }
+    else if (e.key === 'Escape') { if (open) { e.preventDefault(); closeSuggest(); } }
+    else if (e.key === 'Tab') { closeSuggest(); }
+  });
+
+  $('#searchForm').addEventListener('submit', (e) => { e.preventDefault(); applySearch(q.value); });
+
+  $('#suggestPanel').addEventListener('click', (e) => {
+    const row = e.target.closest('[data-sug]');
+    if (row) { openStationModal(+row.dataset.sug); return; }
+    if (e.target.closest('#sugAll')) applySearch(q.value);
+  });
+
+  /* Province combobox */
+  $('#provinceBtn').addEventListener('click', () => { comboState.open ? closeCombo(true) : openCombo(); });
+  $('#provinceSearch').addEventListener('input', (e) => { renderComboList(e.target.value); });
+  $('#provinceSearch').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveComboActive(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveComboActive(-1); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = comboState.active >= 0 ? comboState.active : 0;
+      if (comboState.items[idx]) setProvince(comboState.items[idx].value);
+    }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCombo(true); }
+    else if (e.key === 'Tab') { closeCombo(false); }
+  });
+  $('#provinceList').addEventListener('click', (e) => {
+    const opt = e.target.closest('[data-province]');
+    if (opt) setProvince(opt.dataset.province);
+  });
+
   $('#sortBy').addEventListener('change', (e) => { state.sort = e.target.value; state.page = 1; renderResults(); });
   $('#regionChips').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-region]');
     if (!btn) return;
     state.region = btn.dataset.region;
     state.page = 1;
-    renderRegionChips();
     renderResults();
   });
   $('#quickChips').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-q]');
-    if (!btn) return;
-    $('#q').value = btn.dataset.q;
-    state.q = btn.dataset.q;
-    state.page = 1;
-    renderResults();
-    $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (btn) applySearch(btn.dataset.q);
   });
   $('#clearFiltersBtn').addEventListener('click', resetFilters);
   $('#exportCsvBtn').addEventListener('click', exportCSV);
@@ -473,18 +759,39 @@ function bindEvents() {
     const detailBtn = e.target.closest('[data-open-detail]');
     if (detailBtn) return openStationModal(+detailBtn.dataset.openDetail);
     const copyBtn = e.target.closest('[data-copy]');
-    if (copyBtn) { const st = STATIONS.find(s => s.id === +copyBtn.dataset.copy); if (st) copyText(`${st.name}\n${st.address}\nโทร ${formatPhoneDisplay(st.phone) || '-'} | แฟกซ์ ${formatPhoneDisplay(st.fax) || '-'}`); return; }
+    if (copyBtn) { const st = STATIONS.find(s => s.id === +copyBtn.dataset.copy); if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(copyBtn)); return; }
     const printBtn = e.target.closest('[data-print-one]');
     if (printBtn) { const st = STATIONS.find(s => s.id === +printBtn.dataset.printOne); if (st) printStation(st); return; }
     const saveBtn = e.target.closest('[data-save]');
     if (saveBtn) { toggleSave(+saveBtn.dataset.save); return; }
   });
 
+  /* Theme */
+  $('#themeToggle').addEventListener('click', () => {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  try {
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      let stored = null; try { stored = localStorage.getItem('ps:theme'); } catch { /* ignore */ }
+      if (!stored) applyTheme(e.matches ? 'dark' : 'light');
+    });
+  } catch { /* older browsers */ }
+
+  /* Modal */
   $('#modalClose').addEventListener('click', closeStationModal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeStationModal(); });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusables = $$('a[href], button:not([disabled]), iframe, input, select, textarea, [tabindex]:not([tabindex="-1"])', modal)
+      .filter(el => el.getClientRects().length);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
   $('#dCopy').addEventListener('click', (e) => {
     const st = STATIONS.find(s => s.id === +e.currentTarget.dataset.id);
-    if (st) copyText(`${st.name}\n${st.address}\nโทร ${formatPhoneDisplay(st.phone) || '-'} | แฟกซ์ ${formatPhoneDisplay(st.fax) || '-'}`);
+    if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(e.currentTarget));
   });
   $('#dPrint').addEventListener('click', (e) => {
     const st = STATIONS.find(s => s.id === +e.currentTarget.dataset.id);
@@ -498,20 +805,28 @@ function bindEvents() {
     e.currentTarget.textContent = on ? 'บันทึกแล้ว ✓' : 'บันทึกสถานีนี้';
   });
 
+  /* Global keys + outside clicks */
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
-      e.preventDefault(); $('#q').focus();
+      e.preventDefault();
+      const target = $('.header').classList.contains('searching') ? qMini : q;
+      target.focus(); target.select();
     } else if (e.key === 'Escape' && modal.classList.contains('open')) {
       closeStationModal();
     }
   });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#searchField')) closeSuggest();
+    if (comboState.open && !e.target.closest('#provinceCombo')) closeCombo(false);
+  });
 }
 
 /* ---------- Boot ---------- */
-populateProvinces();
+applyTheme(document.documentElement.dataset.theme || 'light');
+updateProvinceLabel();
 applyURL();
-renderRegionChips();
 renderStats();
 updateSavedUI();
 bindEvents();
+initScrollUI();
 renderResults();
