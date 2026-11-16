@@ -43,17 +43,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\serve.ps1 -Port 8123
 ```
 PS-Locator/
 ├── index.html              # หน้าเดียวจบ (SPA-ish)
+├── qr-poster.html          # โปสเตอร์ QR พิมพ์ A4
 ├── assets/
-│   ├── styles.css          # Design system (ราชการสมัยใหม่ / Minimal)
+│   ├── styles.css          # Design system สองธีม (สว่าง/มืด)
 │   ├── app.js              # ค้นหา/กรอง/พิมพ์/CSV/บันทึก — vanilla JS
 │   └── favicon.svg
 ├── data/
 │   ├── stations.js         # ข้อมูลสถานี (generated) — window.STATIONS
-│   ├── stations.json       # ข้อมูลเดียวกันในรูป JSON (สำหรับตรวจสอบ/ต่อยอด)
-│   └── stations-raw.json   # ข้อมูลดิบจากต้นทางก่อนผูกภาค
+│   └── stations.json       # ข้อมูลเดียวกันในรูป JSON (สำหรับตรวจสอบ/ต่อยอด)
+│   # stations-raw.json (ข้อมูลดิบก่อนผูกภาค) เก็บในเครื่องผู้ดูแล — ไม่อยู่ใน repo
 ├── tools/
 │   ├── build-stations.ps1  # แปลง stations-raw.json → stations.js/.json (ผูกภาคให้)
+│   ├── merge-data.ps1      # รวม/เทียบข้อมูลดิบเมื่ออัปเดตจากต้นทาง
 │   └── serve.ps1           # dev server ไม่ต้องติดตั้งอะไร
+├── docs/DATA_SOURCES.md    # อ้างอิงแหล่งข้อมูลสถานีตำรวจ
+├── CHANGELOG.md            # บันทึกการเปลี่ยนแปลงรายเวอร์ชัน
+├── PROJECT_STATUS.md       # สถานะโครงการปัจจุบัน
+├── AGENTS.md               # คู่มือสำหรับ AI agent/ผู้พัฒนาร่วม
 └── README.md
 ```
 
@@ -89,6 +95,16 @@ PS-Locator/
 - “ภาค” ผูกครบทุกสถานีตามประกาศการแบ่งเขตพื้นที่การปกครองของ ตร. (บช.น. + ภ.1–ภ.9)
 - สถานีที่ต้นทางไม่ได้กรอกที่อยู่/เบอร์ จะแสดง “ไม่มีข้อมูล” อย่างชัดเจน ไม่ถูกแต่งเติม
 - การนำทางใช้ Google Maps ค้นจากชื่อ + ที่อยู่ (ไม่ต้องใช้ API key)
+
+## 📚 เอกสารโครงการ
+
+| เอกสาร | เนื้อหา |
+|---|---|
+| [CHANGELOG.md](CHANGELOG.md) | บันทึกการเปลี่ยนแปลงรายเวอร์ชัน (v1.0.0, v1.1.0) |
+| [PROJECT_STATUS.md](PROJECT_STATUS.md) | สถานะปัจจุบัน: เวอร์ชัน, releases, ข้อมูล, การทดสอบ, deploy, แผนถัดไป |
+| [AGENTS.md](AGENTS.md) | คู่มือสำหรับ AI agent/ผู้พัฒนาร่วม: กติกาเหล็ก, สถาปัตยกรรม, คำสั่ง, ขั้นตอน release/rollback |
+| [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) | อ้างอิงแหล่งข้อมูลสถานีตำรวจอย่างละเอียด |
+| [GitHub Releases](https://github.com/akaradje/ps-locator/releases) | รายละเอียดแต่ละเวอร์ชัน + zip พร้อม deploy สำหรับย้อนกลับ |
 
 ## 🙏 เครดิต
 
