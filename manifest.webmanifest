@@ -1,0 +1,13 @@
+{
+  "name": "PS Locator — สารบบสถานีตำรวจทั่วประเทศ",
+  "short_name": "PS Locator",
+  "description": "ค้นหาที่อยู่ สน./สภ. ทั่วประเทศไทย พร้อมโทรศัพท์ โทรสาร เว็บไซต์ และแผนที่นำทาง — สำหรับพนักงานสอบสวน",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F7F6F2",
+  "theme_color": "#10151D",
+  "lang": "th",
+  "icons": [
+    { "src": "assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

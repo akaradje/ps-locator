@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PS Locator — QR Code สำหรับห้องสอบสวน | สภ.เมืองชุมพร</title>
+<meta name="description" content="โปสเตอร์ QR Code สำหรับห้องสอบสวน สแกนเพื่อค้นหาที่อยู่ สน./สภ. ทั่วประเทศ">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Noto+Serif+Thai:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #171E29; --ink-2: #2E3847; --paper: #F7F6F2; --red: #7E1F1A; --red-dk: #5F1410;
+    --gold: #C9A227; --ok: #1E6F4C; --line: #E5E2D9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Sarabun", sans-serif; background: #E8E6E0; color: var(--ink); }
+
+  /* ---------- Screen only: toolbar ---------- */
+  .screenbar {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: center; gap: 12px;
+    background: var(--ink); color: #fff; padding: 10px 16px; font-size: 13.5px;
+  }
+  .screenbar button {
+    background: var(--red); color: #fff; border: none; border-radius: 8px; padding: 8px 18px;
+    font-family: "Sarabun"; font-weight: 600; font-size: 13.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .screenbar button:hover { background: var(--red-dk); }
+  .screenbar a { color: var(--gold); text-decoration: none; }
+
+  /* ---------- Poster sheet (A4) ---------- */
+  .sheet {
+    width: min(800px, 100%); margin: 28px auto 40px; background: var(--paper);
+    box-shadow: 0 18px 50px rgba(23,30,41,.35); position: relative; overflow: hidden;
+    border: 1px solid #CFCBC0;
+  }
+  .sheet::before, .sheet::after {
+    content: ""; position: absolute; left: 22px; right: 22px; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--gold) 12%, var(--gold) 88%, transparent);
+  }
+  .sheet::before { top: 12px; }
+  .sheet::after { bottom: 12px; }
+
+  .poster-head {
+    background: var(--ink); color: #fff; text-align: center; padding: 26px 24px 22px;
+    border-bottom: 4px double var(--gold);
+  }
+  .poster-head .rtp { font-size: 11px; letter-spacing: 3.4px; color: var(--gold); font-weight: 700; text-transform: uppercase; }
+  .poster-head .org { font-family: "Noto Serif Thai", serif; font-weight: 700; font-size: 24px; margin: 4px 0 10px; }
+  .poster-head .rule { width: 120px; height: 2px; background: var(--gold); margin: 0 auto; opacity: .9; }
+
+  .emblem-row { display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 12px; }
+  .brand-title { text-align: left; }
+  .brand-title b { font-family: "Noto Serif Thai", serif; font-size: 34px; font-weight: 800; line-height: 1.1; display: block; }
+  .brand-title b em { color: #FFD966; font-style: normal; }
+  .brand-title span { font-size: 13px; color: #C9CED8; letter-spacing: .8px; display: block; margin-top: 4px; }
+
+  .poster-body { padding: 26px 30px 30px; text-align: center; }
+  .kicker { font-size: 12.5px; letter-spacing: 2.6px; font-weight: 700; color: var(--red); text-transform: uppercase; }
+  h1 { font-family: "Noto Serif Thai", serif; font-size: 31px; line-height: 1.3; margin: 10px 0 4px; font-weight: 800; }
+  h1 .hl { color: var(--red); border-bottom: 5px solid var(--gold); }
+  .sub { font-size: 15.5px; color: var(--ink-2); margin-bottom: 20px; }
+
+  .qr-card {
+    display: inline-block; background: #fff; padding: 16px; border-radius: 18px;
+    border: 2px solid var(--ink); box-shadow: 0 10px 28px rgba(23,30,41,.22); position: relative;
+  }
+  .qr-card img { display: block; width: 250px; height: 250px; }
+  .qr-badge {
+    position: absolute; top: -14px; right: -14px; width: 46px; height: 46px; background: var(--red);
+    color: #fff; border-radius: 50%; display: grid; place-items: center; border: 3px solid var(--paper);
+    font-size: 20px;
+  }
+  .url { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 17px; color: var(--ink); margin-top: 14px; }
+  .url b { background: var(--ink); color: #FFD966; border-radius: 8px; padding: 3px 12px; }
+
+  .steps { display: flex; gap: 12px; justify-content: center; margin: 20px auto 0; max-width: 640px; }
+  .step { flex: 1; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 10px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+  .step b { color: var(--red); display: block; font-size: 12px; letter-spacing: 1.2px; margin-bottom: 3px; }
+  .step .num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: #FFD966; font-family: "IBM Plex Mono"; font-size: 13px; margin-bottom: 6px; }
+
+  .poster-foot {
+    background: var(--ink); color: #E8E6DE; display: flex; align-items: center; justify-content: space-between;
+    gap: 18px; padding: 16px 26px; border-top: 3px double var(--gold); font-size: 12.5px; line-height: 1.6;
+  }
+  .poster-foot .hot { text-align: left; }
+  .poster-foot .hot b { color: #FFD966; font-family: "IBM Plex Mono"; font-size: 15px; letter-spacing: .5px; }
+  .poster-foot .dev { text-align: right; color: #A9B2BF; }
+  .poster-foot .dev b { color: #fff; }
+  .poster-foot a { color: var(--gold); text-decoration: none; }
+
+  /* ---------- Print ---------- */
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff; }
+    .screenbar { display: none !important; }
+    .sheet { width: 100%; min-height: 100vh; margin: 0; box-shadow: none; border: none; }
+    .sheet::before { top: 10mm; } .sheet::after { bottom: 10mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screenbar" role="toolbar" aria-label="เครื่องมือโปสเตอร์">
+  <span>🖨️ พิมพ์โปสเตอร์นี้ติดหน้า <b>A4</b></span>
+  <button type="button" onclick="window.print()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    พิมพ์โปสเตอร์
+  </button>
+  <span>หรือเปิดบนมือถือ: <a href="assets/ps-locator-qr.png" download="ps-locator-qr.png">ดาวน์โหลด QR</a></span>
+</div>
+
+<main class="sheet" role="main" aria-labelledby="poster-title">
+
+  <div class="poster-head">
+    <div class="rtp">ROYAL THAI POLICE · สำนักงานตำรวจแห่งชาติ</div>
+    <div class="org">สภ.เมืองชุมพร</div>
+    <div class="rule"></div>
+    <div class="emblem-row">
+      <svg width="74" height="74" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="#7E1F1A"/>
+        <circle cx="32" cy="32" r="24.5" fill="none" stroke="#C9A227" stroke-width="1.6"/>
+        <path d="M32 12l3.1 6.3 6.9 1-5 4.9 1.2 6.9L32 30.2 25.8 33.5l1.2-6.9-5-4.9 6.9-1L32 12Z" fill="#C9A227"/>
+        <path d="M20 44h24M24 48.5h16" stroke="#F7F6F2" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-title">
+        <b>PS<em>&nbsp;LOCATOR</em></b>
+        <span>สารบบสถานีตำรวจทั่วประเทศไทย</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="poster-body">
+    <span class="kicker">เครื่องมือของพนักงานสอบสวน</span>
+    <h1 id="poster-title">สแกนเพื่อค้นหา<br><span class="hl">สน. / สภ.</span> ทั่วประเทศ</h1>
+    <p class="sub">ที่อยู่ · โทรศัพท์ · โทรสาร · เว็บไซต์ · แผนที่นำทาง — ครบทุกสถานี 1,484 แห่ง ครบ 77 จังหวัด</p>
+
+    <div class="qr-card">
+      <span class="qr-badge" aria-hidden="true">✓</span>
+      <img src="assets/ps-locator-qr.png" width="250" height="250" alt="QR Code ไปยังเว็บไซต์ PS Locator — ps-locator.prajamwan.workers.dev">
+    </div>
+    <div class="url">https://<b>ps-locator.prajamwan.workers.dev</b></div>
+
+    <div class="steps" aria-label="วิธีใช้งาน 3 ขั้นตอน">
+      <div class="step"><span class="num">1</span><b>เปิดกล้อง</b>เปิดกล้องมือถือ หรือแอปสแกน QR ของท่าน</div>
+      <div class="step"><span class="num">2</span><b>สแกน QR</b>สแกนกรอบสี่เหลี่ยมบนโปสเตอร์นี้</div>
+      <div class="step"><span class="num">3</span><b>ค้นหาสถานี</b>พิมพ์ชื่อสถานี จังหวัด หรือสแกนนำทางได้ทันที</div>
+    </div>
+  </div>
+
+  <div class="poster-foot">
+    <div class="hot">
+      เหตุด่วนเหตุร้าย <b>191</b><br>
+      แจ้งเบาะแส ตร. <b>1599</b>
+    </div>
+    <div class="dev">
+      พัฒนาโดย <b>ผู้ช่วยพนักงานสอบสวน<br>สภ.เมืองชุมพร</b><br>
+      แจ้งข้อมูลคลาดเคลื่อน <a href="mailto:akaradje07@gmail.com">akaradje07@gmail.com</a>
+    </div>
+  </div>
+
+</main>
+</body>
+</html>
