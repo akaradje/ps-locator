@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Noto+Serif+Thai:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script>if (new URLSearchParams(location.search).has('poster-image')) document.documentElement.classList.add('poster-image');</script>
 <style>
   :root {
     --ink: #171E29; --ink-2: #2E3847; --paper: #F7F6F2; --red: #7E1F1A; --red-dk: #5F1410;
@@ -19,7 +20,7 @@
 
   /* ---------- Screen only: toolbar ---------- */
   .screenbar {
-    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: center; gap: 12px;
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px;
     background: var(--ink); color: #fff; padding: 10px 16px; font-size: 13.5px;
   }
   .screenbar button {
@@ -59,8 +60,8 @@
   .poster-body { padding: 26px 30px 30px; text-align: center; }
   .kicker { font-size: 12.5px; letter-spacing: 2.6px; font-weight: 700; color: var(--red); text-transform: uppercase; }
   h1 { font-family: "Noto Serif Thai", serif; font-size: 31px; line-height: 1.3; margin: 10px 0 4px; font-weight: 800; }
-  h1 .hl { color: var(--red); border-bottom: 5px solid var(--gold); }
-  .sub { font-size: 15.5px; color: var(--ink-2); margin-bottom: 20px; }
+  h1 .hl { color: var(--red); text-decoration: underline; text-decoration-color: var(--gold); text-decoration-thickness: 4px; text-underline-offset: 7px; text-decoration-skip-ink: none; }
+  .sub { font-size: 15.5px; color: var(--ink-2); margin: 9px 0 20px; }
 
   .qr-card {
     display: inline-block; background: #fff; padding: 16px; border-radius: 18px;
@@ -90,6 +91,10 @@
   .poster-foot .dev b { color: #fff; }
   .poster-foot a { color: var(--gold); text-decoration: none; }
 
+  .poster-image body { background: var(--paper); }
+  .poster-image .screenbar { display: none; }
+  .poster-image .sheet { width: 800px; margin: 0; box-shadow: none; }
+
   /* ---------- Print ---------- */
   @page { size: A4; margin: 0; }
   @media print {
@@ -108,6 +113,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
     พิมพ์โปสเตอร์
   </button>
+  <a href="assets/ps-locator-poster.png" download="ps-locator-poster.png">ดาวน์โหลดภาพโปสเตอร์ทั้งหน้า (PNG)</a>
   <span>หรือเปิดบนมือถือ: <a href="assets/ps-locator-qr.png" download="ps-locator-qr.png">ดาวน์โหลด QR</a></span>
 </div>
 
@@ -163,3 +169,4 @@
 </main>
 </body>
 </html>
+
