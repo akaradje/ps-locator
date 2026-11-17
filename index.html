@@ -75,6 +75,7 @@
     </div>
     <nav class="nav" aria-label="เมนูหลัก">
       <a class="nav-link" href="#results">ค้นหา</a>
+      <a class="nav-link" href="#jurisdiction">เขตอำนาจ</a>
       <a class="nav-link" href="#howto">วิธีใช้</a>
       <a class="nav-link" href="#about-sources">แหล่งข้อมูล</a>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="สลับโหมดสว่าง/มืด" aria-pressed="false" title="สลับธีม สว่าง/มืด">
@@ -154,6 +155,73 @@
   </div>
 </section>
 
+<!-- ════════ JURISDICTION WORKSPACE (ค้นหาเขตอำนาจจากชื่อตำบล) ════════ -->
+<section class="jur" id="jurisdiction" aria-labelledby="jurTitle">
+  <div class="wrap-x">
+    <div class="jur-head">
+      <div>
+        <span class="kicker">จากประกาศ 427 หน้า สู่การตรวจสอบเขตรับผิดชอบที่เข้าใจง่าย</span>
+        <h2 id="jurTitle">เขตอำนาจสอบสวน · ค้นจากชื่อตำบล</h2>
+        <p>พิมพ์ชื่อตำบล/แขวงที่เกิดเหตุ → รู้ <b>สภ./สน. ที่รับผิดชอบ</b> ที่อยู่ เบอร์โทร รายชื่อตำบลในเขต เขตเพื่อนบ้านสำหรับส่งหมาย/ประสานคดี และเลขหน้าในราชกิจจานุเบกษา</p>
+      </div>
+      <div class="jur-steps" aria-hidden="true">
+        <span><b>ค้นจากตำบล</b>รู้โรงพักที่รับผิดชอบ</span>
+      </div>
+    </div>
+
+    <div class="jur-tabs" role="tablist" aria-label="เลือกส่วนการทำงาน">
+      <button class="jur-tab" role="tab" type="button" id="tabJur" aria-controls="panelJur" aria-selected="true" tabindex="0">ค้นหาเขตรับผิดชอบจากชื่อตำบล</button>
+      <button class="jur-tab" role="tab" type="button" id="tabDigest" aria-controls="panelDigest" aria-selected="false" tabindex="-1">ย่อประกาศ · ค้นหาได้</button>
+    </div>
+
+    <!-- ───────── ค้นหาเขตอำนาจจากชื่อตำบล ───────── -->
+    <div class="jur-panel" id="panelJur" role="tabpanel" aria-labelledby="tabJur" tabindex="0">
+      <form class="jur-search" id="jurForm" role="search">
+        <label class="sr-only" for="jurQ">ค้นหาชื่อตำบล แขวง อำเภอ จังหวัด หรือชื่อสถานีตำรวจ</label>
+        <div class="jur-field">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input id="jurQ" type="search" autocomplete="off" spellcheck="false" placeholder="พิมพ์ชื่อตำบล เช่น บางพลีใหญ่, เสม็ด, ในเมือง…" aria-autocomplete="list" aria-controls="jurSuggest" aria-expanded="false">
+          <div class="jur-suggest" id="jurSuggest" role="listbox" aria-label="คำแนะนำชื่อตำบล" hidden></div>
+        </div>
+        <button class="btn btn-primary" type="submit">ค้นหาเขตอำนาจ</button>
+      </form>
+      <div class="jur-hints">
+        <span>ตัวอย่าง:</span>
+        <button class="chip" type="button" data-jq="บางพลีใหญ่">บางพลีใหญ่</button>
+        <button class="chip" type="button" data-jq="เสม็ด">เสม็ด</button>
+        <button class="chip" type="button" data-jq="ในเมือง">ในเมือง</button>
+        <button class="chip" type="button" data-jq="ห้วยกะปิ">ห้วยกะปิ</button>
+        <span class="jur-hint-note">พิมพ์ไม่เต็มก็เจอ · ค้นชื่อ สภ./สน. หรือจังหวัดได้ด้วย</span>
+      </div>
+      <p class="jur-coverage" id="jurCoverage">กำลังโหลดบัญชีแนบท้ายประกาศสำนักงานตำรวจแห่งชาติ…</p>
+      <p class="sr-only" role="status" id="jurStatus"></p>
+      <div class="jur-results" id="jurResults" aria-label="ผลการตรวจสอบเขตอำนาจ"></div>
+    </div>
+
+    <!-- ───────── ย่อประกาศ + ค้นหาในฉบับเต็ม ───────── -->
+    <div class="jur-panel" id="panelDigest" role="tabpanel" aria-labelledby="tabDigest" tabindex="0" hidden>
+      <div class="jur-digest-head">
+        <div>
+          <h3>ย่อประกาศ 427 + 13 หน้า ให้เข้าใจง่าย</h3>
+          <p class="jur-note">อ่านจบในไม่กี่นาที แล้วพิมพ์คำค้นเพื่อกระโดดไปประเด็นที่ต้องการ · ข้อความย่อไม่ใช่ประกาศฉบับจริง</p>
+        </div>
+        <label class="sr-only" for="digestQ">ค้นหาในบทสรุปประกาศ</label>
+        <div class="jur-digest-search">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input id="digestQ" type="search" autocomplete="off" spellcheck="false" placeholder="ค้นคำว่า ส่งหมาย, แจ้งเหตุ, ฉบับที่ 2…">
+        </div>
+      </div>
+      <div class="jur-sources" id="jurSources"></div>
+      <div class="jur-cards" id="digestCards" role="region" aria-live="polite" aria-label="บทสรุปประกาศ"></div>
+      <div class="jur-full">
+        <button class="btn btn-outline btn-sm" id="fullSearchBtn" type="button">ค้นหาในข้อความประกาศฉบับเต็ม</button>
+        <span id="fullSearchHint">โหลดข้อความเฉพาะเมื่อกดค้นหา · ผลลัพธ์แสดงเลขหน้าในราชกิจจานุเบกษา</span>
+      </div>
+      <div class="jur-full-results" id="fullResults" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ════════ RESULTS ════════ -->
 <main id="results" class="section-results" aria-label="ผลการค้นหาสถานีตำรวจ">
   <div class="wrap-x">
@@ -208,6 +276,9 @@
         <ul>
           <li><a href="https://www.royalthaipolice.go.th/th/police-stations" target="_blank" rel="noopener">สำนักงานตำรวจแห่งชาติ — ข้อมูลสถานีตำรวจ</a></li>
           <li><a href="data/stations.json" download="ps-locator-stations.json">ดาวน์โหลดชุดข้อมูลดิบ (JSON)</a></li>
+          <li><a href="https://ratchakitcha.soc.go.th/documents/17187.pdf" target="_blank" rel="noopener">ประกาศ ตร. 22 มีนาคม 2567 · เขตอำนาจ (427 หน้า)</a></li>
+          <li><a href="https://ratchakitcha.soc.go.th/documents/91341.pdf" target="_blank" rel="noopener">ประกาศ ตร. ฉบับที่ 2 · 22 ตุลาคม 2568 (13 หน้า)</a></li>
+          <li><a href="#jurisdiction">ค้นหาเขตอำนาจจากชื่อตำบล · ย่อประกาศ</a></li>
           <li><a href="https://github.com/akaradje/ps-locator" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.5 4.8 18.5 5.1 18.5 5.1c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/></svg>
             ดูโค้ดบน GitHub
@@ -271,6 +342,7 @@
         พิมพ์รายละเอียด
       </button>
       <button class="btn btn-ghost" id="dSave" type="button" aria-pressed="false">บันทึกสถานีนี้</button>
+      <button class="btn btn-ghost" id="dJurisdiction" type="button">ดูเขตอำนาจของสถานีนี้</button>
     </div>
   </div>
 </div>

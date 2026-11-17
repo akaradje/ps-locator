@@ -16,13 +16,13 @@
 1. **ห้ามแก้ไขข้อมูลสถานีทุกกรณี** — `data/stations.js` และ `data/stations.json` เป็นข้อมูลยืนยันจาก ตร. แล้ว การอัปเดตข้อมูลทำได้ผ่านขั้นตอนในหัวข้อ 6 เท่านั้น (รันสคริปต์จากข้อมูลดิบต้นทางใหม่ ไม่ใช่แก้มือ)
 2. **ห้ามแต่งเติมข้อมูล** — ฟิลด์ที่ต้นทางไม่มี (45 สถานี) ต้องแสดง “ไม่มีข้อมูล” ห้ามเดาที่อยู่/เบอร์/เว็บไซต์
 3. **ห้ามเพิ่ม dependency / build step / framework** — เว็บต้องเปิดผ่าน static server ได้ทันทีโดยไม่ติดตั้งอะไร
-4. **ห้ามเปลี่ยนคีย์ localStorage** (`ps:saved`, `ps:theme`) และ **URL params** (`q`, `province`, `region`, `sort`, `page`) — ผู้ใช้มีข้อมูลบันทึกและลิงก์แชร์ค้างอยู่ · ตัวเลือก `#sortBy` ถูกเอาออกจากหน้าเว็บแล้ว แต่ `state.sort` และพารามิเตอร์ `sort` **ต้องยังอ่านได้** เพื่อรักษาลิงก์เก่า
+4. **ห้ามเปลี่ยนคีย์ localStorage** (`ps:saved`, `ps:theme`) และ **URL params** (`q`, `province`, `region`, `sort`, `page`, `j`, `jtab`) — ผู้ใช้มีข้อมูลบันทึกและลิงก์แชร์ค้างอยู่ · ตัวเลือก `#sortBy` ถูกเอาออกจากหน้าเว็บแล้ว แต่ `state.sort` และพารามิเตอร์ `sort` **ต้องยังอ่านได้** เพื่อรักษาลิงก์เก่า · **ห้ามใช้คีย์ `ps:scene` และพารามิเตอร์ `pin`** (เป็นของฟีเจอร์ปักหมุดที่ถูกลบ)
 5. **ข้อความ UI ทั้งหมดเป็นภาษาไทย** — ตรวจทานก่อน commit ทุกครั้ง ห้ามมีคำภาษาอื่นปน (จีน เวียดนาม ญี่ปุ่น ฯลฯ) ในข้อความที่ผู้ใช้เห็น รวมถึง README/CHANGELOG/release notes
 6. **ระบบพิมพ์ A4 และ CSV ต้องทำงานเสมอ** — เป็นฟีเจอร์หลักที่ผู้ใช้พึ่งพา (พิมพ์แนบคดี, CSV เปิด Excel ภาษาไทยไม่เพี้ยนด้วย BOM) · งานพิมพ์ **ห้ามมีช่องลงชื่อและบรรทัดแหล่งข้อมูล** (ตัดออกตามคำขอผู้ใช้ 16 พ.ย. 2569) เหลือเพียง “พิมพ์จาก PS Locator · วันที่พิมพ์ …”
 7. **รองรับสองธีม (สว่าง/มืด) ทุกคอมโพเนนต์ใหม่** — ใช้ CSS variables เท่านั้น ห้าม hardcode สี และตรวจ contrast ทั้งสองธีม
 8. **Accessibility เป็นข้อบังคับ** — คีย์บอร์ดครบ, aria ถูกต้อง, เคารพ `prefers-reduced-motion`, focus trap ในโมดัล
-9. **ขอบเขตโปรเจกต์ = สารบบสถานีตำรวจเพียงอย่างเดียว** — ฟีเจอร์ “เขตอำนาจการสอบสวนจากชื่อตำบล / ปักหมุดที่เกิดเหตุ / ย่อประกาศราชกิจจานุเบกษา” ถูกตัดออกทั้งชุดตามคำขอผู้ใช้ 17 พ.ย. 2569 (รวม `data/jurisdictions.js`, `docs/gazette/`, สคริปต์ Python, พารามิเตอร์ `j`/`pin`/`jtab` และคีย์ `ps:scene`) · **ห้ามนำกลับมา** เว้นแต่ผู้ใช้สั่งชัดเจน · ประกาศเขตอำนาจต้องตรวจจากต้นฉบับทางการเท่านั้น
-10. **Release เก่าห้ามแก้** — notes และไฟล์แนบของ `v1.0.0` / `v1.1.0` คงเดิมถาวร เพื่อให้ย้อนกลับได้จริง · ทุก release ใหม่ต้องแนบ zip snapshot + ระบุ SHA256 ใน notes
+9. **ขอบเขตโปรเจกต์ = สารบบสถานีตำรวจ + ตรวจเขตอำนาจจากตำบล + ย่อประกาศที่ค้นหาได้** — แต่ **“ปักหมุดที่เกิดเหตุ / วางแผนเข้าพื้นที่” ถูกตัดออกตามคำสั่งผู้ใช้ 17 พ.ย. 2569** · **ห้ามนำกลับมา** เว้นแต่ผู้ใช้สั่งชัดเจน · ผลค้นหาเขตอำนาจมาจากการถอดข้อความประกาศ (มี 4 สถานีถอดไม่ครบ + เขตบางส่วน) → ต้องแสดงป้ายเตือนและตรวจต้นฉบับทางการก่อนใช้ทางกฎหมาย
+10. **Release เก่าห้ามแก้** — notes และไฟล์แนบของ `v1.0.0` / `v1.1.0` / `v1.2.0` คงเดิมถาวร เพื่อให้ย้อนกลับได้จริง · ทุก release ใหม่ต้องแนบ zip snapshot + ระบุ SHA256 ใน notes
 11. การ commit/push/tag/release: ทำเมื่อผู้ใช้สั่งเท่านั้น — และใช้ author เดิมของ repo (`Monoia <35655438+akaradje@users.noreply.github.com>`) ผ่าน `git -c user.name=... -c user.email=...` ห้ามแก้ git config ของเครื่อง
 
 ## 3. โครงสร้างไฟล์
@@ -37,10 +37,15 @@ assets/favicon.svg      ไอคอน
 assets/ps-locator-*.png โปสเตอร์ QR + PNG เต็ม
 data/stations.js        window.STATIONS = [...] (generated — ห้ามแก้มือ)
 data/stations.json      ข้อมูลเดียวกันรูป JSON (generated — ห้ามแก้มือ)
+data/jurisdictions.js   window.JURISDICTION = {...} (generated — ห้ามแก้มือ, โหลดแบบ lazy)
 tools/build-stations.ps1  แปลง stations-raw.json → stations.js/.json + ผูกภาคอัตโนมัติ
 tools/merge-data.ps1      รวม/เทียบข้อมูลดิบเมื่ออัปเดตจากต้นทาง
 tools/serve.ps1           dev server (PowerShell HttpListener, default port 8123)
+tools/extract-gazette.py  (ผู้ดูแล/ออฟไลน์) ถอดข้อความไทยจาก PDF ราชกิจจานุเบกษา
+tools/build-jurisdictions.py (ผู้ดูแล/ออฟไลน์) สร้าง data/jurisdictions.js
 docs/DATA_SOURCES.md      เอกสารอ้างอิงแหล่งข้อมูล
+docs/gazette/2567.txt     ข้อความประกาศ ตร. 427 หน้า (ใช้ค้นฉบับเต็ม)
+docs/gazette/2568-2.txt   ข้อความประกาศฉบับที่ 2 อีก 13 หน้า
 CHANGELOG.md            บันทึกการเปลี่ยนแปลงรายเวอร์ชัน (root)
 PROJECT_STATUS.md       สถานะโครงการปัจจุบัน
 README.md               คู่มือภาพรวม
@@ -61,8 +66,9 @@ README.md               คู่มือภาพรวม
 - **โมดัล:** focus trap (Tab วนในกล่อง), Esc ปิด, คลิก overlay ปิด, คืนโฟกัสจุดเดิม · เปิดจาก suggestion ต้องปิด suggestion ก่อนเสมอ · `.modal` เป็น flex column → `.modal-head`/`.modal-foot` ตรึง, `.modal-body` เลื่อนเอง · ปุ่ม `#dCopy` ต้องเป็น btn-primary ลำดับแรกใน `.modal-foot`
 - **พิมพ์:** `printStation()` / `printFilteredList()` — ตราสัญลักษณ์ SVG + หัวกระดาษราชการ + ท้ายใบ “พิมพ์จาก PS Locator · วันที่พิมพ์ …” · **ไม่มีช่องลงชื่อ / ไม่มีบรรทัดแหล่งข้อมูล / ไม่มี “หน้า 1 / 1”** · `@page A4 margin 14mm 13mm` · บังคับ `color-scheme: light` ตอนพิมพ์
 - **คัดลอก:** `stationCopyText()` = ชื่อสถานี + ที่อยู่ + โทรศัพท์ — **ไม่มีแฟกซ์** · ต้องเก็บ `e.currentTarget` ไว้ในตัวแปรก่อนเข้า async callback ไม่งั้น feedback “คัดลอกแล้ว” จะไม่แสดง
-- **URL:** `syncURL()` ต้องต่อ `window.location.hash` กลับเข้า `history.replaceState` เสมอ
-- **CSV:** UTF-8 + BOM literal นำหน้าเสมอ
+- **URL:** `syncURL()` ต้องต่อ `window.location.hash` กลับเข้า `history.replaceState` เสมอ · เพิ่ม `j` (คำค้นตำบล) และ `jtab` (`jur` / `digest`) แต่ **ต้องไม่มี `pin` / `jtab=scene`**
+- **เขตอำนาจ:** `data/jurisdictions.js` โหลด lazy ด้วย `loadJurisdiction()` → `afterJurisdictionLoaded()` · `normJur()` ตัดคำนำหน้าเกี่ยวกับตำบล/อำเภอ/จังหวัด แต่ `jurKeys()` ต้องเก็บทั้งแบบตัดและแบบดิบไว้ (ตำบลจริงชื่อ `จ. ป. ร.`) · ถ้ามี exact hit ใน `d.index` ให้กด fuzzy station-name fallback ไว้ เพื่อไม่ให้ผลค้นหาเพี้ยน · แยกป้ายเตือน `missing` (ถอดไม่ครบ) กับ `partialCount` (บางส่วน/เฉพาะหมู่ที่/แนวเขต) · `data/jurisdictions.js` ห้ามแก้มือ ต้องสร้างจาก `tools/build-jurisdictions.py` เท่านั้น
+- **CSV:** UTF-8 + BOM literal นำหน้าเสมอ (ทั้ง `exportCSV()` และ `exportJurisdictionCSV()`)
 - **pitfall ที่เคยเจอ (อย่าทำซ้ำ):**
   - CSS grid auto-placement: item ที่กำหนด row ชัดแต่ column auto จะถูกจัดก่อน item auto อื่น → กำหนด `grid-column/grid-row` ชัดทุกส่วนย่อย
   - Flex `flex:1; min-width:0` ในแถวที่เนื้อหาแน่นจะยุบเหลือ ~0 → ใช้ `flex:1 1 <basis>; min-width:<px>`
@@ -104,7 +110,8 @@ git diff v1.0.0 HEAD -- data/     # ต้องว่างเปล่า — 
 - [ ] URL params: รีโหลดแล้วตัวกรองอยู่ครบ · แชร์ลิงก์เปิดได้ผลเดิม
 - [ ] **console errors = 0** · ไม่มีการทับซ้อน/ล้น/ตกจอ · ข้อมูล data/ ไม่ถูกแก้
 - [ ] ข้อความ UI เป็นไทยล้วน ไม่มีคำภาษาอื่นปน
-- [ ] **ไม่มีเศษโค้ดของฟีเจอร์เขตอำนาจ/ปักหมุดที่เกิดเหตุ** — สแกน `jurisdiction`, `jurParams`, `ps:scene`, `jtab`, `incident-map`, `JURISDICTION`, `gazette`, `ปักหมุด` ต้องไม่พบ (ยกเว้น `#sortBy` แบบ guarded)
+- [ ] หน้าเขตอำนาจ: ค้นตำบล → ได้ สภ./สน. + รายชื่อตำบล + เขตเพื่อนบ้าน + เลขหน้า · suggestions คีย์บอร์ด · ป้ายเตือน 4 สถานีถอดไม่ครบ/เขตบางส่วน · ค้นฉบับเต็ม · พิมพ์ใบตรวจสอบ A4 · CSV · โหลด lazy · ทั้งสองธีม
+- [ ] **ไม่มีเศษโค้ด/UI ของฟีเจอร์ปักหมุดที่เกิดเหตุ** — สแกน `parsePin`, `setPin`, `ps:scene`, `jtab=scene`, `incident-map`, `ปักหมุด` ต้องไม่พบในโค้ด/ข้อความที่ผู้ใช้เห็น (`jurisdiction` / `jtab` / `JURISDICTION` / `gazette` ต้องมีเพราะเป็นฟีเจอร์ที่คืนแล้ว)
 
 ## 8. ขั้นตอน Release + Rollback (ทำเมื่อผู้ใช้สั่ง)
 
@@ -127,9 +134,10 @@ gh release list --repo akaradje/ps-locator
 ```
 
 - เวอร์ชัน: ฟีเจอร์ UI ใหม่ = minor · อัปเดตข้อมูล = minor ขึ้นไปพร้อมระบุชัด · แก้บั๊กเล็กน้อย = patch
-- **Rollback 3 ทาง:** (1) ดาวน์โหลด zip ของ release ที่ต้องการ (`v1.2.0` / `v1.1.0` / `v1.0.0`) → อัปโหลดทับใน Cloudflare Dashboard (~1 นาที, แนะนำ) (2) `git checkout <tag>` หรือ `git revert <commit>` (3) `git archive --format=zip ... <tag>` แล้ว deploy
+- **Rollback 3 ทาง:** (1) ดาวน์โหลด zip ของ release ที่ต้องการ (`v1.2.0` = ไม่มีเขตอำนาจเลย, `v1.1.0`, `v1.0.0`) → อัปโหลดทับใน Cloudflare Dashboard (~1 นาที, แนะนำ) (2) `git checkout <tag>` หรือ `git revert <commit>` (3) `git archive --format=zip ... <tag>` แล้ว deploy
 - **ตรวจสอบความสมบูรณ์ก่อน deploy:** เปรียบเทียบ SHA256 ของ zip ที่ดาวน์โหลดกับค่าที่ระบุใน release notes
-- **Release เก่า = จุดย้อนกลับ:** อย่าแก้ `--notes`, อย่าลบ/แทนที่ asset ของ `v1.0.0` / `v1.1.0` · ถ้าต้องการรายละเอียดเพิ่ม ให้เขียนรวมไว้ใน notes ของ release ใหม่แทน
+- **Release เก่า = จุดย้อนกลับ:** อย่าแก้ `--notes`, อย่าลบ/แทนที่ asset ของ `v1.0.0` / `v1.1.0` / `v1.2.0` · ถ้าต้องการรายละเอียดเพิ่ม ให้เขียนรวมไว้ใน notes ของ release ใหม่แทน
+- **ข้อมูลเขตอำนาจติด release ด้วย:** zip ต้องมี `data/jurisdictions.js` และ `docs/gazette/*.txt` — ตรวจรายชื่อไฟล์ใน zip ก่อนสร้าง release เสมอ
 - Deploy จริง: Cloudflare Dashboard → Workers & Pages → Upload your static files → Deploy (ทำในบัญชี Cloudflare ของผู้ดูแล — agent ทำให้ไม่ได้)
 - หลัง deploy: ตรวจเว็บจริง + แนะนำรัน Lighthouse ซ้ำ แล้วอัปเดต `PROJECT_STATUS.md`
 

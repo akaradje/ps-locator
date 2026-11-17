@@ -711,6 +711,106 @@ html[data-theme="dark"] .to-top:hover { background: var(--red); color: #fff; }
 .footer .brand-line { display: flex; align-items: center; gap: 10px; color: #fff; font-family: var(--font-serif); font-weight: 700; font-size: 18px; margin-bottom: 10px; }
 .footer-bottom { border-top: 1px solid rgba(255,255,255,.09); padding: 12px 0 16px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: #7E8896; }
 
+/* ============ JURISDICTION WORKSPACE (ค้นหาเขตอำนาจจากชื่อตำบล) ============ */
+.jur { padding: 30px 0 44px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.jur-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 18px; }
+.jur-head h2 { font-family: var(--font-serif); font-size: 25px; line-height: 1.25; margin: 6px 0 6px; }
+.jur-head p { margin: 0; color: var(--ink-2); font-size: 14.5px; max-width: 78ch; }
+.jur-head p b { color: var(--red-ink); }
+.jur-steps { display: flex; gap: 8px; flex: none; }
+.jur-steps span { display: grid; gap: 2px; padding: 8px 14px; border: 1px solid var(--line-strong); border-left: 3px solid var(--gold-2); border-radius: var(--r-sm); background: var(--card); font-size: 12.5px; color: var(--muted); }
+.jur-steps b { font-family: var(--font-serif); font-size: 14px; color: var(--ink); }
+
+.jur-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.jur-tab { font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; color: var(--ink-2); background: var(--card); border: 1px solid var(--line-strong); border-radius: 999px; padding: 9px 16px; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.jur-tab:hover { border-color: var(--red); color: var(--red-ink); }
+.jur-tab[aria-selected="true"] { background: var(--strip); border-color: var(--strip); color: #fff; box-shadow: var(--shadow-sm); }
+.jur-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; box-shadow: var(--shadow-sm); }
+.jur-panel[hidden] { display: none; }
+.jur-panel h3 { font-family: var(--font-serif); font-size: 18px; margin: 0 0 6px; }
+.jur-note { font-size: 13px; color: var(--muted); margin: 0 0 14px; line-height: 1.6; }
+.jur-link { color: var(--red-ink); font-size: 12.5px; text-underline-offset: 3px; }
+
+/* ค้นหาเขตอำนาจ */
+.jur-search { display: flex; gap: 10px; flex-wrap: wrap; }
+.jur-field { position: relative; display: flex; align-items: center; flex: 1 1 320px; min-width: 240px; }
+.jur-field > svg { position: absolute; left: 13px; color: var(--faint); pointer-events: none; }
+.jur-field input { width: 100%; font-family: var(--font-sans); font-size: 15px; color: var(--ink); background: var(--field); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 11px 14px 11px 42px; }
+.jur-field input::placeholder { color: var(--faint); }
+.jur-field input:focus { outline: none; border-color: var(--red); box-shadow: var(--ring); background: var(--card); }
+.jur-suggest { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; right: 0; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--shadow-lg); max-height: 320px; overflow-y: auto; }
+.jur-suggest[hidden] { display: none; }
+.jur-sug-row { display: flex; gap: 10px; align-items: baseline; padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--line); font-size: 14px; }
+.jur-sug-row:last-child { border-bottom: 0; }
+.jur-sug-row:hover, .jur-sug-row[aria-selected="true"] { background: var(--red-tint); }
+.jur-sug-row b { font-weight: 600; }
+.jur-sug-row small { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.jur-sug-empty { padding: 14px; color: var(--muted); font-size: 13px; }
+.jur-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.jur-hint-note { margin-left: 4px; }
+.jur-coverage { font-size: 12.5px; color: var(--muted); margin: 12px 0 14px; padding: 9px 12px; background: var(--gold-soft); border: 1px solid var(--gold); border-radius: var(--r-sm); color: var(--gold-ink); }
+
+.jur-results { display: grid; gap: 14px; }
+.jur-card { border: 1px solid var(--line); border-left: 3px solid var(--red); border-radius: var(--r-md); padding: 16px; background: var(--field); }
+.jur-card.is-address { border-left-color: var(--metro-ink); }
+.jur-answer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.jur-answer .lead { font-family: var(--font-serif); font-size: 19px; color: var(--ink); }
+.jur-answer .arrow { color: var(--gold-ink); font-size: 18px; }
+.jur-answer .target { font-family: var(--font-serif); font-size: 20px; font-weight: 700; color: var(--red-ink); }
+.jur-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--ink-2); margin: 6px 0 10px; }
+.jur-meta a { color: var(--red-ink); }
+.jur-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.jur-sec-title { font-size: 12px; font-weight: 700; letter-spacing: .6px; color: var(--muted); margin: 14px 0 8px; }
+.jur-tambons { display: flex; flex-wrap: wrap; gap: 6px; }
+.jur-tambon { font-size: 12.5px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--card); color: var(--ink-2); }
+.jur-tambon.hit { background: var(--red-tint-2); border-color: var(--red); color: var(--red-ink); font-weight: 700; }
+.jur-tambon.partial { border-style: dashed; }
+.jur-neighbors { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.jur-neighbor { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); font-size: 13px; }
+.jur-neighbor a { color: var(--red-ink); font-family: var(--font-mono); }
+.jur-warn { margin: 10px 0 0; padding: 9px 12px; border-radius: var(--r-sm); background: var(--gold-soft); border: 1px solid var(--gold); color: var(--gold-ink); font-size: 12.5px; }
+.jur-empty { padding: 26px 18px; text-align: center; border: 1px dashed var(--line-strong); border-radius: var(--r-md); color: var(--muted); }
+.jur-empty h3 { font-family: var(--font-serif); color: var(--ink); margin: 0 0 6px; }
+.jur-empty p { margin: 0 0 12px; font-size: 13.5px; }
+.jur-empty a { color: var(--red-ink); }
+
+/* ย่อประกาศ */
+.jur-digest-head { display: flex; gap: 18px; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.jur-digest-search { display: flex; align-items: center; gap: 8px; min-width: 260px; flex: 0 1 320px; padding: 8px 12px; background: var(--field); border: 1px solid var(--line-strong); border-radius: var(--r-sm); color: var(--faint); }
+.jur-digest-search:focus-within { border-color: var(--red); box-shadow: var(--ring); }
+.jur-digest-search input { border: 0; background: transparent; outline: none; color: var(--ink); font-family: var(--font-sans); font-size: 14px; width: 100%; }
+.jur-digest-search input::placeholder { color: var(--faint); }
+.jur-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.jur-source { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--field); font-size: 13px; }
+.jur-source b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 3px; }
+.jur-source small { color: var(--muted); display: block; }
+.jur-source a { color: var(--red-ink); }
+.jur-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.jur-summary-card { padding: 14px; border: 1px solid var(--line); border-top: 2px solid var(--gold-2); border-radius: var(--r-sm); background: var(--field); }
+.jur-summary-card h4 { font-family: var(--font-serif); font-size: 15.5px; margin: 0 0 6px; }
+.jur-summary-card p { margin: 0 0 8px; font-size: 13px; line-height: 1.65; color: var(--ink-2); }
+.jur-summary-card small { color: var(--muted); font-size: 11.5px; }
+.jur-full { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 10px; }
+.jur-full span { font-size: 12px; color: var(--muted); }
+.jur-full-results { display: grid; gap: 10px; }
+.jur-full-row { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--field); font-size: 13px; }
+.jur-full-row b { color: var(--red-ink); }
+.jur-full-row p { margin: 6px 0 0; color: var(--ink-2); line-height: 1.6; }
+
+@media (max-width: 900px) {
+  .jur-head { align-items: flex-start; }
+}
+@media (max-width: 640px) {
+  .jur { padding: 22px 0 30px; }
+  .jur-panel { padding: 14px; }
+  .jur-head h2 { font-size: 21px; }
+  .jur-steps { width: 100%; }
+  .jur-steps span { flex: 1; }
+  .jur-tab { flex: 1 1 100%; text-align: center; border-radius: var(--r-sm); }
+  .jur-digest-search { flex: 1 1 100%; min-width: 0; }
+  .jur-search .btn { width: 100%; justify-content: center; }
+}
+
 /* ============ PRINT (component styles shared with on-screen debug preview) ============ */
 #print-area { display: none; }
 .print-sheet { font-family: var(--font-sans); color: #000; background: #fff; }

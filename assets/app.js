@@ -39,6 +39,10 @@ const state = {
 try { state.saved = new Set(JSON.parse(localStorage.getItem('ps:saved') || '[]')); }
 catch { state.saved = new Set(); }
 
+/* พารามิเตอร์ของพื้นที่งานเขตอำนาจ — แยกจาก state เดิม
+   ใช้คีย์ใหม่ (j, jtab) เพื่อไม่กระทบลิงก์แชร์เดิม q/province/region/sort/page */
+const jurParams = { q: '', tab: 'jur' };
+
 /* ---------- Helpers ---------- */
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
@@ -347,6 +351,8 @@ function syncURL() {
     if (state.region !== 'all') p.set('region', state.region);
     if (state.sort !== 'region') p.set('sort', state.sort);
     if (state.page > 1) p.set('page', String(state.page));
+    if (jurParams.q) p.set('j', jurParams.q);
+    if (jurParams.tab !== 'jur') p.set('jtab', jurParams.tab);
     const qs = p.toString();
     /* คง hash ไว้เสมอ เพื่อไม่ให้ลิงก์ #results / #howto หายตอนซิงก์พารามิเตอร์ */
     history.replaceState(null, '', (qs ? '?' + qs : window.location.pathname) + window.location.hash);
@@ -363,7 +369,7 @@ function applyURL() {
     }
     if (p.get('region') && REGIONS.some(r => r.id === p.get('region'))) state.region = p.get('region');
     /* ตัวเลือกเรียงลำดับถูกเอาออกจากหน้าเว็บแล้ว แต่ยังอ่านพารามิเตอร์ sort เดิม
-       เพื่อให้ลิงก์แชร์เก่ายังแสดงลำดับเดิมได้ */
+       เพื่อให้ลิงก์แชร์เก่ายังแสดงลำดับเดิมได้ (ไม่เปลี่ยนพารามิเตอร์ตามกติกาโปรเจกต์) */
     if (p.get('sort') && ['region', 'name', 'province'].includes(p.get('sort'))) {
       state.sort = p.get('sort');
       const sortSel = $('#sortBy');
@@ -371,6 +377,8 @@ function applyURL() {
     }
     const pg = parseInt(p.get('page') || '1', 10);
     if (pg > 0) state.page = pg;
+    if (p.get('j')) jurParams.q = p.get('j');
+    if (['jur', 'digest'].includes(p.get('jtab'))) jurParams.tab = p.get('jtab');
   } catch { /* ignore */ }
 }
 
@@ -491,7 +499,8 @@ function renderResults() {
 
 function resetFilters() {
   state.q = ''; state.province = ''; state.region = 'all'; state.savedOnly = false; state.page = 1;
-  /* ไม่มีตัวเลือกเรียงลำดับบนหน้าเว็บแล้ว — "ล้างตัวกรองทั้งหมด" คือทางกลับสู่ลำดับปกติ */
+  /* ไม่มีตัวเลือกเรียงลำดับบนหน้าเว็บแล้ว — "ล้างตัวกรองทั้งหมด" คือทางกลับสู่ลำดับปกติ
+     สำหรับคนที่เปิดลิงก์เก่าที่มี sort=name / sort=province */
   state.sort = 'region';
   $('#q').value = ''; $('#qMini').value = '';
   updateProvinceLabel();
@@ -826,6 +835,547 @@ function bindEvents() {
   });
 }
 
+/* ============================================================
+   พื้นที่งาน "เขตอำนาจสอบสวน" (ค้นหาจากชื่อตำบล + ย่อประกาศ)
+   ข้อมูล: window.JURISDICTION (data/jurisdictions.js — โหลดเมื่อต้องการใช้)
+   ============================================================ */
+const ST_BY_ID = new Map(STATIONS.map(s => [s.id, s]));
+const jurState = {
+  data: null, loading: null, sug: [], sugActive: -1, results: [],
+  digestQ: '', fullText: null, fullBusy: false,
+};
+const JUR_ADDR = new Map();   /* ตำบล/แขวงจากที่อยู่สถานี → id สถานี (ใช้เฉพาะกรณีไม่มีบัญชีประกาศ) */
+const JUR_TABS = [
+  { id: 'jur', tab: 'tabJur', panel: 'panelJur' },
+  { id: 'digest', tab: 'tabDigest', panel: 'panelDigest' },
+];
+
+/** ตัดคำนำหน้าตำบล/แขวง/อำเภอเพื่อให้พิมพ์ "ต.หันคา" หรือ "หันคา" เจอเหมือนกัน */
+function normJur(s) {
+  return norm(String(s ?? '')
+    .replace(/^\s*(ตำบล|แขวง|อำเภอ|จังหวัด|ต\.|อ\.|จ\.|เขต)\s*/gu, '')
+    .replace(/[“”„]/g, ''));
+}
+
+/** คีย์สำหรับเทียบกับดัชนี: แบบตัดคำนำหน้า + แบบไม่ตัด
+ *  จำเป็นเพราะมีชื่อตำบลจริงที่ขึ้นต้นด้วย "จ." เช่น "จ. ป. ร" (จ.ระนอง)
+ *  ซึ่งคำนำหน้าจังหวัดจะไปทับชื่อตำบลได้ */
+function jurKeys(qRaw) {
+  const a = normJur(qRaw), b = norm(qRaw);
+  return (b && b !== a) ? [a, b] : [a];
+}
+
+function buildAddressIndex() {
+  for (const st of STATIONS) {
+    const a = String(st.address || '');
+    const names = new Set();
+    let m = a.match(/(?:ต\.|ตำบล)\s*([^\s,/]+)/u);
+    if (m) names.add(m[1]);
+    m = a.match(/แขวง(?:\/เขต)?\s*([^\s,/]+)/u);
+    if (m) names.add(m[1]);
+    for (const n of names) {
+      const k = normJur(n);
+      if (!k) continue;
+      if (!JUR_ADDR.has(k)) JUR_ADDR.set(k, []);
+      const arr = JUR_ADDR.get(k);
+      if (!arr.includes(st.id)) arr.push(st.id);
+    }
+  }
+}
+
+function loadJurisdiction() {
+  if (jurState.data) return Promise.resolve(jurState.data);
+  if (jurState.loading) return jurState.loading;
+  jurState.loading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'data/jurisdictions.js';
+    s.onload = () => {
+      if (!window.JURISDICTION) { reject(new Error('ข้อมูลไม่สมบูรณ์')); return; }
+      jurState.data = window.JURISDICTION;
+      resolve(jurState.data);
+    };
+    s.onerror = () => reject(new Error('โหลดข้อมูลไม่สำเร็จ'));
+    document.head.appendChild(s);
+  });
+  return jurState.loading;
+}
+
+function afterJurisdictionLoaded() {
+  const d = jurState.data;
+  const c = d.coverage;
+  $('#jurCoverage').textContent =
+    `บัญชีแนบท้ายประกาศ หน้า 113–344 · ถอดได้ ${c.stations.toLocaleString('th-TH')} สถานี / ${c.tambonNames.toLocaleString('th-TH')} ชื่อตำบล ใน ${c.provinces} จังหวัด · ` +
+    `มี ${c.stationsNeedVerify} สถานีที่ข้อความในประกาศระบุตำบลไม่ครบตามจำนวน (แสดงป้าย "ต้องตรวจสอบ") · ` +
+    `อีก ${(c.allStations - c.stations).toLocaleString('th-TH')} สถานียังไม่มีบัญชีตำบล (ส่วนใหญ่เป็น สน. ใน กทม.) — แสดง "ตำบล/แขวงที่ตั้งสถานีจากที่อยู่" พร้อมป้ายกำกับแทน`;
+  renderSources();
+  renderDigest();
+  if (jurParams.q) {
+    $('#jurQ').value = jurParams.q;
+    jurSearch(jurParams.q, { silent: true });
+  } else {
+    renderJurIdle();
+  }
+}
+
+function jurisLoadFailed() {
+  $('#jurCoverage').textContent = 'ไม่สามารถโหลดบัญชีแนบท้ายประกาศได้ — กรุณาเปิดเว็บผ่าน HTTP แล้วโหลดใหม่อีกครั้ง';
+  $('#jurResults').innerHTML = `<div class="jur-empty"><h3>ไม่มีข้อมูล</h3><p>ชุดข้อมูลเขตอำนาจยังไม่พร้อมใช้งาน กรุณาตรวจสอบกับสถานีตำรวจโดยตรง หรือเปิดประกาศฉบับเต็ม</p></div>`;
+}
+
+/* ---------- แท็บ (role=tablist) ---------- */
+function setJurTab(id, focus = false) {
+  const t = JUR_TABS.find(x => x.id === id) || JUR_TABS[0];
+  jurParams.tab = t.id;
+  for (const x of JUR_TABS) {
+    const btn = $('#' + x.tab), panel = $('#' + x.panel);
+    const on = x.id === t.id;
+    btn.setAttribute('aria-selected', String(on));
+    btn.tabIndex = on ? 0 : -1;
+    panel.hidden = !on;
+    if (on && focus) btn.focus();
+  }
+  if (t.id !== 'jur') closeJurSuggest();
+  if (t.id === 'digest') renderDigest();
+  syncURL();
+}
+
+/* ---------- ค้นหาเขตอำนาจจากชื่อตำบล ---------- */
+function jurFindCandidates(qRaw) {
+  const d = jurState.data;
+  const keys = jurKeys(qRaw), qn = keys[0];
+  if (!qn || !d) return { hits: [], addrHits: [], exact: false };
+  const recByIdx = new Map();
+  const add = (i, hitName, kind) => {
+    if (!recByIdx.has(i)) recByIdx.set(i, { idx: i, hitName, kind, rank: 9 });
+    const o = recByIdx.get(i);
+    if (kind === 'exact' && o.rank > 0) { o.rank = 0; o.hitName = hitName; o.kind = kind; }
+    else if (kind === 'tambon' && o.rank > 1) { o.rank = 1; o.hitName = hitName; o.kind = kind; }
+    else if (kind === 'station' && o.rank > 2) { o.rank = 2; o.hitName = hitName; o.kind = kind; }
+  };
+  const hasKey = (k) => keys.some(n => n && k.includes(n));
+  let exact = false;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(d.index, key) && Array.isArray(d.index[key])) {
+      exact = true;
+      for (const i of d.index[key]) add(i, qRaw.trim(), 'exact');
+    }
+  }
+  /* ถ้าเจอชื่อตำบลตรงตัวในบัญชีประกาศแล้ว ต้องไม่เอาการค้นแบบ "มีคำนี้อยู่ในชื่อสถานี"
+     มาปนผล (เช่น "จ.ป.ร." ตัดคำนำหน้าเหลือ "ปร" จะไปติดชื่อ สภ. "ประ..." เป็นสิบแห่ง) */
+  if (!exact) {
+    let n = 0;
+    for (const [k, arr] of Object.entries(d.index)) {
+      if (hasKey(k)) {
+        for (const i of arr) add(i, k, 'tambon');
+        if (++n > 60) break;
+      }
+    }
+    /* ค้นด้วยชื่อสถานี / จังหวัด / อำเภอ / ภาค */
+    for (let i = 0; i < d.stations.length; i++) {
+      const r = d.stations[i];
+      const st = ST_BY_ID.get(r.id);
+      const hay = [normJur(r.short), normJur(st ? st.name : ''), normJur(r.province), normJur(r.amphoe), normJur('ภ.' + r.region)].join('|');
+      if (hasKey(hay)) add(i, r.short, 'station');
+    }
+  }
+  /* ตำบล/แขวงที่ตั้งสถานีจากที่อยู่ (สำหรับสถานีที่ไม่มีบัญชีตำบลในประกาศ) */
+  const addrHits = [];
+  for (const [k, ids] of JUR_ADDR) {
+    const match = exact ? keys.includes(k) : keys.some(n => n && (k === n || k.includes(n)));
+    if (!match) continue;
+    for (const id of ids) {
+      if (!jurState.data.stations.some(r => r.id === id)) addrHits.push({ id, from: k, exact: keys.includes(k) });
+    }
+  }
+  const hits = [...recByIdx.values()].sort((a, b) => a.rank - b.rank ||
+    d.stations[a.idx].province.localeCompare(d.stations[b.idx].province, 'th') ||
+    d.stations[a.idx].short.localeCompare(d.stations[b.idx].short, 'th'));
+  return { hits, addrHits, exact };
+}
+
+function renderJurIdle() {
+  const d = jurState.data;
+  $('#jurResults').innerHTML = `
+    <div class="jur-empty">
+      <h3>พิมพ์ชื่อตำบลที่ต้องการตรวจสอบ เพื่อรู้ว่าไปโรงพักไหน</h3>
+      <p>รองรับชื่อตำบล แขวง อำเภอ จังหวัด และชื่อ สภ./สน. · ข้อมูลจากบัญชีแนบท้ายประกาศ ${d ? d.meta.sources[0].label : ''}</p>
+      <button class="btn btn-outline btn-sm" type="button" id="jurGoDigest">อ่านสรุปประกาศก่อนก็ได้</button>
+    </div>`;
+  $('#jurGoDigest')?.addEventListener('click', () => setJurTab('digest', true));
+}
+
+function jurSuggest(qRaw) {
+  const keys = jurKeys(qRaw);
+  if (!keys[0] || !jurState.data) return [];
+  const out = [];
+  const seen = new Set();
+  const idx = jurState.data.index;
+  /* ถ้ามีชื่อตำบลตรงตัวแล้ว ให้แนะนำเฉพาะชื่อนั้น ไม่แนะนำคำที่คล้ายกันจนสับสน */
+  const exactKeys = keys.filter(k => Object.prototype.hasOwnProperty.call(idx, k));
+  const useExact = exactKeys.length > 0;
+  for (const [k, arr] of Object.entries(idx)) {
+    if (useExact ? !exactKeys.includes(k) : !keys.some(n => n && k.includes(n))) continue;
+    const r = jurState.data.stations[arr[0]];
+    const key = k + '|' + r.province;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: k, province: r.province, count: arr.length });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function renderJurSuggest() {
+  const panel = $('#jurSuggest'), input = $('#jurQ');
+  const qRaw = input.value.trim();
+  jurState.sug = qRaw ? jurSuggest(qRaw) : [];
+  jurState.sugActive = -1;
+  input.removeAttribute('aria-activedescendant');
+  if (!qRaw) { closeJurSuggest(); return; }
+  panel.innerHTML = jurState.sug.length
+    ? jurState.sug.map((s, i) => `<div class="jur-sug-row" role="option" id="jurSug-${i}" data-jur-sug="${esc(s.name)}" aria-selected="false"><b>${hl(s.name, qRaw)}</b><small>${esc(s.province)} · ${s.count} สถานี</small></div>`).join('')
+    : `<div class="jur-sug-empty">ไม่พบชื่อตำบลที่ตรงกับ “${esc(qRaw)}” ในบัญชีแนบท้ายประกาศ — ลองพิมพ์ชื่อจังหวัดหรือชื่อสถานี</div>`;
+  panel.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+}
+function closeJurSuggest() {
+  $('#jurSuggest').hidden = true;
+  jurState.sugActive = -1;
+  $('#jurQ').setAttribute('aria-expanded', 'false');
+  $('#jurQ').removeAttribute('aria-activedescendant');
+}
+function moveJurSug(delta) {
+  const rows = $$('.jur-sug-row', $('#jurSuggest'));
+  if (!rows.length) return;
+  let next = jurState.sugActive + delta;
+  if (next < 0) next = rows.length - 1;
+  if (next >= rows.length) next = 0;
+  jurState.sugActive = next;
+  rows.forEach((r, i) => r.setAttribute('aria-selected', String(i === next)));
+  rows[next].scrollIntoView({ block: 'nearest' });
+  $('#jurQ').setAttribute('aria-activedescendant', rows[next].id);
+}
+
+function jurSearch(qRaw, opts = {}) {
+  if (!jurState.data) { loadJurisdiction().then(() => jurSearch(qRaw, opts)).catch(jurisLoadFailed); return; }
+  const q = String(qRaw ?? '').trim();
+  jurParams.q = q;
+  $('#jurQ').value = q;
+  closeJurSuggest();
+  if (!q) { jurState.results = []; renderJurIdle(); syncURL(); return; }
+  const { hits, addrHits, exact } = jurFindCandidates(q);
+  jurState.results = { hits, addrHits, q, exact };
+  renderJurResults();
+  $('#jurStatus').textContent = `พบ ${hits.length + addrHits.length} สถานีที่เกี่ยวข้องกับ “${q}”`;
+  syncURL();
+  if (!opts.silent) $('#jurisdiction').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function jurPhoneLink(st) {
+  if (!st || !st.phone) return 'ไม่มีข้อมูล';
+  const digits = st.phone.replace(/\D/g, '');
+  return `<a href="tel:${esc(digits)}">${esc(formatPhoneDisplay(st.phone))}</a>`;
+}
+
+function jurNeighborHTML(rec) {
+  const all = jurState.data.stations;
+  let list = all.filter(r => r.id !== rec.id && r.province === rec.province && r.amphoe === rec.amphoe);
+  if (list.length < 4) list = list.concat(all.filter(r => r.id !== rec.id && r.province === rec.province && r.amphoe !== rec.amphoe));
+  list = list.slice(0, 6);
+  if (!list.length) return '';
+  return `<div class="jur-sec-title">เขตเพื่อนบ้าน · สำหรับประสาน / ส่งหมาย (จังหวัดเดียวกัน)</div>
+    <div class="jur-neighbors">${list.map(r => {
+      const st = ST_BY_ID.get(r.id);
+      return `<div class="jur-neighbor"><button class="card-title-btn" type="button" data-jur-jump="${esc(r.short)}"><b>สภ.${esc(r.short)}</b></button>
+        <span>${esc(r.amphoe)}</span>${jurPhoneLink(st)}</div>`;
+    }).join('')}</div>`;
+}
+
+function jurResultCard(item, q) {
+  const d = jurState.data, rec = d.stations[item.idx], st = ST_BY_ID.get(rec.id);
+  if (!st) return '';
+  const missing = rec.count - rec.tambons.length;
+  const partialCount = rec.tambons.filter(t => t.partial).length;
+  const tambons = rec.tambons.map(t => {
+    const hit = normJur(t.name) === normJur(q) || (item.kind !== 'station' && normJur(q) && normJur(t.name).includes(normJur(q)));
+    return `<span class="jur-tambon ${hit ? 'hit' : ''} ${t.partial ? 'partial' : ''}" title="${esc(t.note || 'ตามบัญชีแนบท้ายประกาศ')}">${esc(t.name)}${t.partial ? ' · บางส่วน' : ''}</span>`;
+  }).join('');
+  /* แยก "ถอดชื่อตำบลไม่ครบ" ออกจาก "มีหมายเหตุแนวเขต" เพื่อไม่ให้เข้าใจผิดว่าข้อมูลครบแล้ว */
+  const warns = [];
+  if (missing > 0) warns.push(`ข้อความในประกาศหน้า ${rec.page} ระบุ ${rec.count} ตำบล แต่ถอดชื่อได้ ${rec.tambons.length} ตำบล — อาจมีชื่อตำบลที่ค้นไม่พบ กรุณาเปิดหน้าประกาศหรือสอบถามสถานีโดยตรงก่อนส่งหมาย / รับแจ้งเหตุ`);
+  if (partialCount > 0) warns.push(`มี ${partialCount} ตำบลที่ประกาศระบุ "บางส่วน / เฉพาะหมู่ที่ / แนวเขต" ต้องตรวจสอบแนวเขตจริงในหน้า ${rec.page} ของราชกิจจานุเบกษา`);
+  const warn = warns.map(w => `<p class="jur-warn">${esc(w)}</p>`).join('');
+  const listTitle = missing > 0
+    ? `ตำบลในเขตอำนาจตามประกาศ (ถอดได้ ${rec.tambons.length} จาก ${rec.count} ตำบล · ชื่อที่ตรงคำค้นไฮไลต์)`
+    : `ตำบลในเขตอำนาจตามประกาศ (${rec.count} ตำบล · ชื่อที่ตรงคำค้นไฮไลต์)`;
+  return `<article class="jur-card">
+    <div class="jur-answer"><span class="lead">${esc(q)}</span><span class="arrow">→</span><span class="target">${esc(st.name)}</span></div>
+    <div class="jur-meta">
+      <span>จังหวัด${esc(rec.province)}</span><span>อำเภอ${esc(rec.amphoe)}</span>
+      <span>ตำรวจภูธรภาค ${esc(rec.region)}</span><span>บัญชีแนบท้าย หน้า ${rec.page}</span>
+    </div>
+    <div class="jur-meta"><span>${esc(st.address || 'ไม่มีข้อมูลที่อยู่')}</span>${jurPhoneLink(st)}</div>
+    <div class="jur-actions">
+      <button class="btn btn-primary btn-sm" type="button" data-jur-detail="${rec.id}">ดูรายละเอียดสถานี</button>
+      <button class="btn btn-outline btn-sm" type="button" data-jur-copy="${rec.id}">คัดลอกข้อมูลสถานี</button>
+      <button class="btn btn-outline btn-sm" type="button" data-jur-print="${rec.id}">พิมพ์ใบตรวจสอบเขตอำนาจ</button>
+      <a class="btn btn-outline btn-sm" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">นำทางไปโรงพัก</a>
+    </div>
+    <div class="jur-sec-title">${listTitle}</div>
+    <div class="jur-tambons">${tambons || '<span class="jur-tambon">ไม่มีข้อมูล</span>'}</div>
+    ${warn}
+    ${jurNeighborHTML(rec)}
+  </article>`;
+}
+
+function jurAddressCard(h, q) {
+  const st = ST_BY_ID.get(h.id);
+  if (!st) return '';
+  return `<article class="jur-card is-address">
+    <div class="jur-answer"><span class="lead">${esc(q)}</span><span class="arrow">→</span><span class="target">${esc(st.name)}</span></div>
+    <div class="jur-meta"><span>จังหวัด${esc(st.province_th)}</span><span>${esc(REGION_SHORT[st.region] || '')}</span>${jurPhoneLink(st)}</div>
+    <div class="jur-meta"><span>${esc(st.address || 'ไม่มีข้อมูลที่อยู่')}</span></div>
+    <p class="jur-warn">รายการนี้เป็น <b>ตำบล/แขวงที่ตั้งสถานีตามที่อยู่</b> ไม่ใช่บัญชีเขตอำนาจตามประกาศ (ส่วนใหญ่เป็น สน. ในกรุงเทพมหานคร ซึ่งประกาศกำหนดเขตด้วยแนวถนน/คลอง) โปรดตรวจสอบกับสถานีโดยตรงก่อนดำเนินการทางคดี</p>
+    <div class="jur-actions">
+      <button class="btn btn-primary btn-sm" type="button" data-jur-detail="${st.id}">ดูรายละเอียดสถานี</button>
+      <button class="btn btn-outline btn-sm" type="button" data-jur-copy="${st.id}">คัดลอกข้อมูลสถานี</button>
+      <a class="btn btn-outline btn-sm" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">นำทางไปโรงพัก</a>
+    </div>
+  </article>`;
+}
+
+function renderJurResults() {
+  const R = jurState.results;
+  const box = $('#jurResults');
+  if (!R.q) { renderJurIdle(); return; }
+  const showHits = R.hits.slice(0, 10);
+  const showAddr = R.addrHits.slice(0, 6);
+  const more = (R.hits.length + R.addrHits.length) - (showHits.length + showAddr.length);
+  const header = `<div class="jur-hints"><span>พบ <b>${R.hits.length + R.addrHits.length}</b> รายการสำหรับ “${esc(R.q)}”</span>
+    <button class="icon-btn" type="button" id="jurCsvBtn">ดาวน์โหลด CSV</button>
+    <button class="btn btn-ghost btn-sm" type="button" id="jurClearBtn">ล้างคำค้น</button></div>`;
+  const body = showHits.map(h => jurResultCard(h, R.q)).join('') + showAddr.map(h => jurAddressCard(h, R.q)).join('');
+  const empty = `<div class="jur-empty"><h3>ไม่มีข้อมูล</h3>
+    <p>ไม่พบ “${esc(R.q)}” ในบัญชีแนบท้ายประกาศและในที่อยู่สถานี กรุณาตรวจสอบการสะกดชื่อตำบล หรือเปิดประกาศฉบับเต็ม / สอบถามสถานีโดยตรง</p>
+    <a href="https://ratchakitcha.soc.go.th/documents/17187.pdf" target="_blank" rel="noopener">เปิดประกาศ 427 หน้า (PDF)</a></div>`;
+  box.innerHTML = (R.hits.length + R.addrHits.length ? header + body + (more > 0 ? `<p class="jur-note">แสดง ${showHits.length + showAddr.length} รายการจากทั้งหมด ${R.hits.length + R.addrHits.length} รายการ — พิมพ์ชื่อตำบลให้เฉพาะเจาะจงขึ้นเพื่อจำกัดผลลัพธ์</p>` : '') : empty);
+  $('#jurCsvBtn')?.addEventListener('click', exportJurisdictionCSV);
+  $('#jurClearBtn')?.addEventListener('click', () => jurSearch(''));
+}
+
+function exportJurisdictionCSV() {
+  const R = jurState.results;
+  if (!R.q) return;
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const lines = [['คำค้น', 'ประเภทข้อมูล', 'ตำบล/คำที่พบ', 'สถานีตำรวจ', 'จังหวัด', 'อำเภอ', 'กองบัญชาการ', 'ที่อยู่', 'โทรศัพท์', 'หน้าในประกาศ', 'หมายเหตุ'].join(',')];
+  for (const h of R.hits) {
+    const rec = jurState.data.stations[h.idx], st = ST_BY_ID.get(rec.id);
+    if (!st) continue;
+    const missing = rec.count - rec.tambons.length;
+    const partial = rec.tambons.filter(t => t.partial).length;
+    const notes = [
+      missing > 0 ? `ถอดชื่อตำบลได้ ${rec.tambons.length} จาก ${rec.count} ตำบล ต้องตรวจสอบประกาศ` : '',
+      partial > 0 ? `มี ${partial} ตำบลระบุบางส่วน/เฉพาะหมู่ที่/แนวเขต` : '',
+    ].filter(Boolean).join(' · ');
+    lines.push([R.q, 'เขตอำนาจตามประกาศ', h.hitName, st.name, rec.province, rec.amphoe, 'ตำรวจภูธรภาค ' + rec.region,
+      st.address, formatPhoneDisplay(st.phone) || '', rec.page, notes].map(q).join(','));
+  }
+  for (const h of R.addrHits) {
+    const st = ST_BY_ID.get(h.id);
+    if (!st) continue;
+    lines.push([R.q, 'ตำบล/แขวงที่ตั้งสถานีตามที่อยู่', h.from, st.name, st.province_th, '', REGION_NAME[st.region] || '',
+      st.address, formatPhoneDisplay(st.phone) || '', '', 'ไม่ใช่บัญชีเขตอำนาจตามประกาศ'].map(q).join(','));
+  }
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = 'ps-locator-hettamnat.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('ดาวน์โหลด CSV แล้ว');
+}
+
+
+function printJurisdiction(rec, query) {
+  const st = ST_BY_ID.get(rec.id);
+  if (!st) return;
+  const list = rec.tambons.map(t => t.name + (t.partial ? ' (บางส่วน)' : '')).join(', ') || 'ไม่มีข้อมูล';
+  const missing = rec.count - rec.tambons.length;
+  const partialCount = rec.tambons.filter(t => t.partial).length;
+  const caution = [
+    missing > 0 ? `ข้อความประกาศหน้า ${rec.page} ระบุ ${rec.count} ตำบล แต่ถอดชื่อได้ ${rec.tambons.length} ตำบล อาจมีชื่อตำบลขาดไป กรุณาตรวจสอบประกาศฉบับจริงหรือสอบถามสถานีโดยตรง` : '',
+    partialCount > 0 ? `มี ${partialCount} ตำบลที่ระบุ "บางส่วน / เฉพาะหมู่ที่ / แนวเขต" ต้องตรวจสอบแนวเขตจริง` : '',
+  ].filter(Boolean).join(' · ');
+  $('#print-area').innerHTML = printHeader('ใบตรวจสอบเขตอำนาจการรับผิดชอบ', 'สำหรับประกอบการรับแจ้งเหตุ / ส่งหมาย / ประสานคดี') +
+    `<table class="print-table"><tbody>
+      <tr><th style="width:30%">คำค้น (ตำบล / แขวง)</th><td><strong>${esc(query)}</strong></td></tr>
+      <tr><th>สถานีตำรวจที่รับผิดชอบ</th><td><strong>${esc(st.name)}</strong></td></tr>
+      <tr><th>จังหวัด / อำเภอ</th><td>${esc(rec.province)} / ${esc(rec.amphoe)}</td></tr>
+      <tr><th>กองบัญชาการ</th><td>ตำรวจภูธรภาค ${esc(rec.region)}</td></tr>
+      <tr><th>ที่อยู่สถานี</th><td>${esc(st.address || 'ไม่มีข้อมูล')}</td></tr>
+      <tr><th>โทรศัพท์</th><td>${esc(formatPhoneDisplay(st.phone) || 'ไม่มีข้อมูล')}</td></tr>
+      <tr><th>จำนวนตำบลในเขตอำนาจ</th><td>${rec.count} ตำบล${missing > 0 ? ` (ถอดชื่อได้ ${rec.tambons.length} ตำบล)` : ''}</td></tr>
+      <tr><th>รายชื่อตำบลในเขตอำนาจ</th><td>${esc(list)}</td></tr>
+      ${caution ? `<tr><th>ข้อควรตรวจสอบ</th><td>${esc(caution)} · ประกาศหน้า ${rec.page}</td></tr>` : ''}
+    </tbody></table>` + printFooter();
+  window.print();
+}
+
+
+/* ---------- ย่อประกาศ + ค้นหาในฉบับเต็ม ---------- */
+function renderSources() {
+  const d = jurState.data;
+  if (!d) return;
+  $('#jurSources').innerHTML = d.meta.sources.map(s =>
+    `<div class="jur-source"><b>${esc(s.label)}</b><small>${esc(s.gazette)} · ${s.pages} หน้า</small>
+      <a href="${esc(s.url)}" target="_blank" rel="noopener">เปิดไฟล์ PDF ต้นฉบับ</a></div>`).join('');
+}
+
+function renderDigest() {
+  const d = jurState.data;
+  if (!d) return;
+  const qn = normJur(jurState.digestQ);
+  const cards = d.summary.filter(c => !qn || normJur([c.title, c.text, c.keys].join(' ')).includes(qn));
+  $('#digestCards').innerHTML = cards.length
+    ? cards.map(c => {
+      const src = d.meta.sources.find(s => s.code === c.doc) || d.meta.sources[0];
+      return `<article class="jur-summary-card"><h4>${esc(c.title)}</h4><p>${hl(c.text, jurState.digestQ)}</p>
+        <small>${esc(src.label)} · หน้า ${c.page} · <a href="${esc(src.url)}#page=${c.page}" target="_blank" rel="noopener">เปิดหน้านั้นใน PDF</a></small></article>`;
+    }).join('')
+    : `<div class="jur-empty"><h3>ไม่มีข้อมูล</h3><p>ไม่พบหัวข้อที่ตรงกับ “${esc(jurState.digestQ)}” — ลองคำว่าตำบล, ส่งหมาย, แจ้งเหตุ หรือฉบับที่ 2</p></div>`;
+}
+
+async function fullTextSearch() {
+  const q = $('#digestQ').value.trim();
+  if (!q) { showToast('พิมพ์คำที่ต้องการค้นหาในประกาศก่อน'); return; }
+  if (jurState.fullBusy) return;
+  jurState.fullBusy = true;
+  $('#fullSearchHint').textContent = 'กำลังค้นหาในข้อความประกาศ…';
+  try {
+    if (!jurState.fullText) {
+      const [a, b] = await Promise.all([
+        fetch('docs/gazette/2567.txt').then(r => r.text()),
+        fetch('docs/gazette/2568-2.txt').then(r => r.text()),
+      ]);
+      const pagesOf = (t, code) => t.split('=== PAGE ').slice(1).map(chunk => {
+        const n = parseInt(chunk, 10);
+        return { code, n, text: chunk.replace(/^\d+\s*===\s*/, '') };
+      }).filter(x => isFinite(x.n));
+      jurState.fullText = [...pagesOf(a, '2567'), ...pagesOf(b, '2568-2')];
+    }
+    const needle = q.toLowerCase();
+    const rows = [];
+    for (const pg of jurState.fullText) {
+      const at = pg.text.toLowerCase().indexOf(needle);
+      if (at === -1) continue;
+      const from = Math.max(0, at - 70), to = Math.min(pg.text.length, at + q.length + 110);
+      const snippet = (from ? '…' : '') + pg.text.slice(from, to).replace(/\s+/g, ' ').trim() + (to < pg.text.length ? '…' : '');
+      const src = jurState.data.meta.sources.find(s => s.code === pg.code);
+      rows.push(`<div class="jur-full-row"><b>${esc(src.label)} · หน้า ${pg.n}</b>
+        <p>${hl(snippet, q)}</p><a class="jur-link" href="${esc(src.url)}#page=${pg.n}" target="_blank" rel="noopener">เปิดหน้า ${pg.n} ใน PDF</a></div>`);
+      if (rows.length >= 12) break;
+    }
+    $('#fullResults').innerHTML = rows.length
+      ? rows.join('') + `<p class="jur-note">แสดงสูงสุด 12 หน้าแรกที่พบคำค้น · ข้อความถอดจาก PDF เพื่อช่วยค้นหา โปรดตรวจสอบกับไฟล์ต้นฉบับ</p>`
+      : `<div class="jur-empty"><h3>ไม่มีข้อมูล</h3><p>ไม่พบคำว่า “${esc(q)}” ในข้อความประกาศที่ถอดไว้</p></div>`;
+    $('#fullSearchHint').textContent = `พบ ${rows.length} หน้า · โหลดข้อความประกาศแล้ว`;
+  } catch {
+    $('#fullResults').innerHTML = `<div class="jur-empty"><h3>ไม่มีข้อมูล</h3><p>โหลดข้อความประกาศไม่สำเร็จ กรุณาเปิดเว็บผ่าน HTTP แล้วลองใหม่ หรือเปิดไฟล์ PDF ต้นฉบับ</p></div>`;
+    $('#fullSearchHint').textContent = 'โหลดไม่สำเร็จ';
+  } finally {
+    jurState.fullBusy = false;
+  }
+}
+
+
+/* ---------- เหตุการณ์ของพื้นที่งานเขตอำนาจ ---------- */
+function bindJurisdictionEvents() {
+  /* แท็บ */
+  JUR_TABS.forEach((t, i) => {
+    $('#' + t.tab).addEventListener('click', () => setJurTab(t.id));
+    $('#' + t.tab).addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? JUR_TABS.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + JUR_TABS.length) % JUR_TABS.length;
+      setJurTab(JUR_TABS[next].id, true);
+    });
+  });
+
+  /* ค้นหาเขตอำนาจ */
+  $('#jurForm').addEventListener('submit', (e) => { e.preventDefault(); jurSearch($('#jurQ').value); });
+  $('#jurQ').addEventListener('input', () => { loadJurisdiction().then(renderJurSuggest).catch(jurisLoadFailed); });
+  $('#jurQ').addEventListener('keydown', (e) => {
+    const open = !$('#jurSuggest').hidden;
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) renderJurSuggest(); else moveJurSug(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (open) moveJurSug(-1); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (open && jurState.sugActive >= 0 && jurState.sug[jurState.sugActive]) jurSearch(jurState.sug[jurState.sugActive].name);
+      else jurSearch($('#jurQ').value);
+    }
+    else if (e.key === 'Escape') { if (open) { e.preventDefault(); closeJurSuggest(); } }
+    else if (e.key === 'Tab') closeJurSuggest();
+  });
+  $('#jurSuggest').addEventListener('click', (e) => {
+    const row = e.target.closest('[data-jur-sug]');
+    if (row) jurSearch(row.dataset.jurSug);
+  });
+  $('.jur-hints').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-jq]');
+    if (b) { jurParams.q = b.dataset.jq; $('#jurQ').value = jurParams.q; jurSearch(jurParams.q); }
+  });
+  $('#jurResults').addEventListener('click', (e) => {
+    const copy = e.target.closest('[data-jur-copy]');
+    if (copy) {
+      const st = ST_BY_ID.get(+copy.dataset.jurCopy);
+      if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(copy));
+      return;
+    }
+    const detail = e.target.closest('[data-jur-detail]');
+    if (detail) { openStationModal(+detail.dataset.jurDetail); return; }
+    const printBtn = e.target.closest('[data-jur-print]');
+    if (printBtn) {
+      const rec = jurState.data.stations.find(r => r.id === +printBtn.dataset.jurPrint);
+      if (rec) printJurisdiction(rec, jurParams.q || rec.short);
+      return;
+    }
+    const jump = e.target.closest('[data-jur-jump]');
+    if (jump) jurSearch(jump.dataset.jurJump);
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.jur-field')) closeJurSuggest(); });
+  $('#dJurisdiction')?.addEventListener('click', () => {
+    const id = +$('#dSave')?.dataset.id;
+    if (!id) return;
+    const st = ST_BY_ID.get(id);
+    closeStationModal();
+    setJurTab('jur');
+    jurSearch(st ? st.name.replace(/^สภ\.|^สน\./, '') : '');
+  });
+
+  /* ย่อประกาศ */
+  $('#digestQ').addEventListener('input', (e) => { jurState.digestQ = e.target.value.trim(); renderDigest(); });
+  $('#digestQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fullTextSearch(); } });
+  $('#fullSearchBtn').addEventListener('click', fullTextSearch);
+}
+
+function initJurisdiction() {
+  buildAddressIndex();
+  bindJurisdictionEvents();
+  if (jurParams.tab === 'digest') setJurTab('digest');
+  else setJurTab('jur');
+  if (jurParams.q || jurParams.tab !== 'jur') {
+    loadJurisdiction().then(afterJurisdictionLoaded).catch(jurisLoadFailed);
+  } else if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) {
+        loadJurisdiction().then(afterJurisdictionLoaded).catch(jurisLoadFailed);
+        io.disconnect();
+      }
+    }, { rootMargin: '400px' });
+    io.observe($('#jurisdiction'));
+  } else {
+    loadJurisdiction().then(afterJurisdictionLoaded).catch(jurisLoadFailed);
+  }
+}
+
 /* ---------- Boot ---------- */
 applyTheme(document.documentElement.dataset.theme || 'light');
 updateProvinceLabel();
@@ -835,3 +1385,4 @@ updateSavedUI();
 bindEvents();
 initScrollUI();
 renderResults();
+initJurisdiction();
