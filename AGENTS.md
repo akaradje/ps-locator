@@ -28,7 +28,8 @@
 ## 3. โครงสร้างไฟล์
 
 ```
-index.html              หน้าเดียวจบ — โครงสร้าง + inline theme script ใน <head> (กันจอวาบ)
+index.html              หน้าสารบบสถานี — โครงสร้าง + inline theme script ใน <head> (กันจอวาบ)
+jurisdiction.html       หน้าเขตอำนาจสอบสวน (ค้นจากชื่อตำบล + ย่อประกาศ) — ใช้ app.js ร่วมกัน
 qr-poster.html          โปสเตอร์ QR พิมพ์ A4 (ชี้ไปเว็บจริง)
 manifest.webmanifest    PWA manifest
 assets/styles.css       Design system: CSS variables สองธีม + คอมโพเนนต์ + @media print

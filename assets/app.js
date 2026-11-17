@@ -210,7 +210,9 @@ function setProvince(v) {
 
 /* ---------- Populate controls ---------- */
 function updateProvinceLabel() {
-  $('#provinceLabel').textContent = state.province || `ทุกจังหวัด (${PROVINCES.length})`;
+  const el = $('#provinceLabel');
+  if (!el) return;
+  el.textContent = state.province || `ทุกจังหวัด (${PROVINCES.length})`;
 }
 
 function regionCounts() {
@@ -235,7 +237,9 @@ function renderRegionChips() {
 }
 
 function renderStats() {
-  $('#statStations').textContent = STATIONS.length.toLocaleString('th-TH');
+  const stationsEl = $('#statStations');
+  if (!stationsEl) return;
+  stationsEl.textContent = STATIONS.length.toLocaleString('th-TH');
   $('#statProvinces').textContent = PROVINCES.length;
 }
 
@@ -251,9 +255,12 @@ function toggleSave(id) {
   renderResults();
 }
 function updateSavedUI() {
-  $('#savedCount').textContent = state.saved.size;
-  $('#savedCountWrap').hidden = state.saved.size === 0 && !state.savedOnly;
-  $('#toggleSavedOnly').setAttribute('aria-pressed', String(state.savedOnly));
+  const count = $('#savedCount');
+  if (count) count.textContent = state.saved.size;
+  const wrap = $('#savedCountWrap');
+  if (wrap) wrap.hidden = state.saved.size === 0 && !state.savedOnly;
+  const toggle = $('#toggleSavedOnly');
+  if (toggle) toggle.setAttribute('aria-pressed', String(state.savedOnly));
 }
 
 const icon = {
@@ -351,8 +358,10 @@ function syncURL() {
     if (state.region !== 'all') p.set('region', state.region);
     if (state.sort !== 'region') p.set('sort', state.sort);
     if (state.page > 1) p.set('page', String(state.page));
-    if (jurParams.q) p.set('j', jurParams.q);
-    if (jurParams.tab !== 'jur') p.set('jtab', jurParams.tab);
+    if ($('#jurForm')) {
+      if (jurParams.q) p.set('j', jurParams.q);
+      if (jurParams.tab !== 'jur') p.set('jtab', jurParams.tab);
+    }
     const qs = p.toString();
     /* คง hash ไว้เสมอ เพื่อไม่ให้ลิงก์ #results / #howto หายตอนซิงก์พารามิเตอร์ */
     history.replaceState(null, '', (qs ? '?' + qs : window.location.pathname) + window.location.hash);
@@ -362,7 +371,12 @@ function syncURL() {
 function applyURL() {
   try {
     const p = new URLSearchParams(window.location.search);
-    if (p.get('q')) { state.q = p.get('q'); $('#q').value = state.q; $('#qMini').value = state.q; }
+    if (p.get('q')) {
+      state.q = p.get('q');
+      const qEl = $('#q'), qMiniEl = $('#qMini');
+      if (qEl) qEl.value = state.q;
+      if (qMiniEl) qMiniEl.value = state.q;
+    }
     if (p.get('province')) {
       const prov = p.get('province');
       if (PROVINCES.some(x => x.name === prov)) { state.province = prov; updateProvinceLabel(); }
@@ -377,6 +391,14 @@ function applyURL() {
     }
     const pg = parseInt(p.get('page') || '1', 10);
     if (pg > 0) state.page = pg;
+  } catch { /* ignore */ }
+}
+
+/* พารามิเตอร์ของหน้าเขตอำนาจ (j, jtab) — แยกอ่านเฉพาะหน้านั้น
+   คงชื่อพารามิเตอร์เดิมไว้เพื่อให้ลิงก์แชร์เก่ายังเปิดได้ */
+function applyJurURL() {
+  try {
+    const p = new URLSearchParams(window.location.search);
     if (p.get('j')) jurParams.q = p.get('j');
     if (['jur', 'digest'].includes(p.get('jtab'))) jurParams.tab = p.get('jtab');
   } catch { /* ignore */ }
@@ -434,10 +456,10 @@ function renderSuggest() {
 
 function closeSuggest() {
   const panel = $('#suggestPanel');
-  panel.hidden = true;
+  if (panel) panel.hidden = true;
   sugState.active = -1;
-  $('#q').setAttribute('aria-expanded', 'false');
-  $('#q').removeAttribute('aria-activedescendant');
+  const q = $('#q');
+  if (q) { q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); }
 }
 
 function moveSugActive(delta) {
@@ -455,16 +477,18 @@ function moveSugActive(delta) {
 function applySearch(qRaw) {
   const v = String(qRaw ?? '');
   state.q = v.trim();
-  $('#q').value = v;
-  $('#qMini').value = v;
+  const qEl = $('#q'), qMiniEl = $('#qMini');
+  if (qEl) qEl.value = v;
+  if (qMiniEl) qMiniEl.value = v;
   state.page = 1;
   closeSuggest();
   renderResults();
-  $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('#results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ---------- Results ---------- */
 function renderResults() {
+  if (!$('#resultsList')) return;   /* หน้าเขตอำนาจไม่มีรายการสถานี */
   const list = getFiltered();
   const total = list.length;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
@@ -664,13 +688,14 @@ function exportCSV() {
 function initScrollUI() {
   const header = $('.header');
   const field = $('#searchField');
-  if ('IntersectionObserver' in window && field) {
+  if ('IntersectionObserver' in window && field && header) {
     const io = new IntersectionObserver(([entry]) => {
       header.classList.toggle('searching', !entry.isIntersecting);
     }, { rootMargin: '-72px 0px 0px 0px', threshold: 0 });
     io.observe(field);
   }
   const toTop = $('#toTop');
+  if (!toTop) return;
   toTop.hidden = false;
   const onScroll = () => toTop.classList.toggle('show', window.scrollY > 600);
   window.addEventListener('scroll', onScroll, { passive: true });
@@ -680,7 +705,9 @@ function initScrollUI() {
 
 /* ---------- Events ---------- */
 let searchDebounce;
-function bindEvents() {
+
+/* หน้าสารบบสถานีเท่านั้น */
+function bindStationEvents() {
   const q = $('#q');
   const qMini = $('#qMini');
 
@@ -778,7 +805,10 @@ function bindEvents() {
     const saveBtn = e.target.closest('[data-save]');
     if (saveBtn) { toggleSave(+saveBtn.dataset.save); return; }
   });
+}
 
+/* ใช้ร่วมทั้งสองหน้า: ธีม · โมดัลรายละเอียดสถานี · คีย์ลัด */
+function bindGlobalEvents() {
   /* Theme */
   $('#themeToggle').addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
@@ -819,20 +849,37 @@ function bindEvents() {
     e.currentTarget.textContent = on ? 'บันทึกแล้ว ✓' : 'บันทึกสถานีนี้';
   });
 
-  /* Global keys + outside clicks */
+  /* ดูเขตอำนาจของสถานีนี้ — อยู่หน้าสารบบให้ข้ามไปหน้าเขตอำนาจ อยู่หน้าเขตอำนาจให้ค้นทันที */
+  $('#dJurisdiction').addEventListener('click', () => {
+    const id = +($('#dSave')?.dataset.id || 0);
+    if (!id) return;
+    const st = ST_BY_ID.get(id);
+    const jq = st ? st.name.replace(/^สภ\.|^สน\./, '').trim() : '';
+    closeStationModal();
+    if ($('#jurForm')) { setJurTab('jur'); jurSearch(jq); }
+    else window.location.href = 'jurisdiction.html?j=' + encodeURIComponent(jq) + '&jtab=jur';
+  });
+
+  /* Global keys */
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
       e.preventDefault();
-      const target = $('.header').classList.contains('searching') ? qMini : q;
-      target.focus(); target.select();
+      const header = $('.header');
+      const search = $('.header') && header.classList.contains('searching') ? $('#qMini') : $('#q');
+      const target = search || $('#jurQ');
+      if (target) { target.focus(); target.select(); }
     } else if (e.key === 'Escape' && modal.classList.contains('open')) {
       closeStationModal();
     }
   });
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#searchField')) closeSuggest();
-    if (comboState.open && !e.target.closest('#provinceCombo')) closeCombo(false);
-  });
+
+  /* ปิดแผงคำแนะนำเมื่อคลิกนอกช่องค้นหา (หน้าสารบบเท่านั้น) */
+  if ($('#searchField')) {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#searchField')) closeSuggest();
+      if (comboState.open && !e.target.closest('#provinceCombo')) closeCombo(false);
+    });
+  }
 }
 
 /* ============================================================
@@ -1341,14 +1388,6 @@ function bindJurisdictionEvents() {
     if (jump) jurSearch(jump.dataset.jurJump);
   });
   document.addEventListener('click', (e) => { if (!e.target.closest('.jur-field')) closeJurSuggest(); });
-  $('#dJurisdiction')?.addEventListener('click', () => {
-    const id = +$('#dSave')?.dataset.id;
-    if (!id) return;
-    const st = ST_BY_ID.get(id);
-    closeStationModal();
-    setJurTab('jur');
-    jurSearch(st ? st.name.replace(/^สภ\.|^สน\./, '') : '');
-  });
 
   /* ย่อประกาศ */
   $('#digestQ').addEventListener('input', (e) => { jurState.digestQ = e.target.value.trim(); renderDigest(); });
@@ -1377,12 +1416,27 @@ function initJurisdiction() {
 }
 
 /* ---------- Boot ---------- */
+const isStationPage = !!$('#resultsList');
+const isJurPage = !!$('#jurForm');
+
+/* ลิงก์เก่าที่ชี้ ?j=… (สมัยที่เขตอำนาจอยู่หน้าเดียวกับสารบบ) → พาไปหน้าเขตอำนาจ */
+if (isStationPage) {
+  const legacy = new URLSearchParams(window.location.search);
+  if (legacy.get('j') || legacy.get('jtab')) window.location.replace('jurisdiction.html' + window.location.search);
+}
+
 applyTheme(document.documentElement.dataset.theme || 'light');
-updateProvinceLabel();
-applyURL();
-renderStats();
-updateSavedUI();
-bindEvents();
+bindGlobalEvents();
 initScrollUI();
-renderResults();
-initJurisdiction();
+
+if (isJurPage) {
+  applyJurURL();
+  initJurisdiction();
+} else if (isStationPage) {
+  applyURL();
+  updateProvinceLabel();
+  renderStats();
+  updateSavedUI();
+  bindStationEvents();
+  renderResults();
+}

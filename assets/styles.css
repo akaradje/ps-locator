@@ -713,13 +713,12 @@ html[data-theme="dark"] .to-top:hover { background: var(--red); color: #fff; }
 
 /* ============ JURISDICTION WORKSPACE (ค้นหาเขตอำนาจจากชื่อตำบล) ============ */
 .jur { padding: 30px 0 44px; border-bottom: 1px solid var(--line); background: var(--paper); }
-.jur-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 18px; }
-.jur-head h2 { font-family: var(--font-serif); font-size: 25px; line-height: 1.25; margin: 6px 0 6px; }
-.jur-head p { margin: 0; color: var(--ink-2); font-size: 14.5px; max-width: 78ch; }
-.jur-head p b { color: var(--red-ink); }
-.jur-steps { display: flex; gap: 8px; flex: none; }
-.jur-steps span { display: grid; gap: 2px; padding: 8px 14px; border: 1px solid var(--line-strong); border-left: 3px solid var(--gold-2); border-radius: var(--r-sm); background: var(--card); font-size: 12.5px; color: var(--muted); }
-.jur-steps b { font-family: var(--font-serif); font-size: 14px; color: var(--ink); }
+
+/* หน้าเขตอำนาจแยกจากหน้าสารบบสถานี */
+.page-hero { border-bottom: 0; }
+.page-hero .wrap { padding-bottom: 26px; }
+.page-hero h1 { font-size: clamp(27px, 3.9vw, 40px); }
+.nav a.nav-link[aria-current="page"] { color: var(--red-ink); background: var(--red-tint); border-color: var(--red-tint-2); }
 
 .jur-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .jur-tab { font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; color: var(--ink-2); background: var(--card); border: 1px solid var(--line-strong); border-radius: 999px; padding: 9px 16px; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }

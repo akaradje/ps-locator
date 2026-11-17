@@ -50,7 +50,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\serve.ps1 -Port 8123
 
 ```
 PS-Locator/
-├── index.html              # หน้าเดียวจบ (SPA-ish)
+├── index.html              # หน้าสารบบสถานี (ค้นหา/กรอง/พิมพ์/CSV)
+├── jurisdiction.html       # หน้าเขตอำนาจสอบสวน (ค้นจากชื่อตำบล + ย่อประกาศ)
 ├── qr-poster.html          # โปสเตอร์ QR พิมพ์ A4
 ├── assets/
 │   ├── styles.css          # Design system สองธีม (สว่าง/มืด)
