@@ -243,6 +243,26 @@ function renderStats() {
   $('#statProvinces').textContent = PROVINCES.length;
 }
 
+function syncSearchClear() {
+  const qEl = $('#q'), btn = $('#clearSearchBtn'), kbd = $('#searchKbd');
+  if (!qEl || !btn) return;
+  const hasVal = qEl.value.length > 0;
+  btn.hidden = !hasVal;
+  if (kbd) kbd.hidden = hasVal;
+}
+
+async function trackVisit() {
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:') return;
+  try {
+    const res = await fetch('/api/visit', { method: 'POST', credentials: 'same-origin' });
+    if (!res.ok) return;
+    const data = await res.json();
+    const visEl = $('#statVisitors'), viewsEl = $('#statViews');
+    if (visEl && typeof data.visitors === 'number') visEl.textContent = data.visitors.toLocaleString('th-TH');
+    if (viewsEl && typeof data.views === 'number') viewsEl.textContent = data.views.toLocaleString('th-TH');
+  } catch { /* offline or static host */ }
+}
+
 /* ---------- Rendering cards ---------- */
 function saveState() {
   try { localStorage.setItem('ps:saved', JSON.stringify([...state.saved])); } catch { /* private mode */ }
@@ -366,6 +386,7 @@ function syncURL() {
     /* คง hash ไว้เสมอ เพื่อไม่ให้ลิงก์ #results / #howto หายตอนซิงก์พารามิเตอร์ */
     history.replaceState(null, '', (qs ? '?' + qs : window.location.pathname) + window.location.hash);
   } catch { /* file:// or sandbox */ }
+  syncSearchClear();
 }
 
 function applyURL() {
@@ -714,6 +735,7 @@ function bindStationEvents() {
   q.addEventListener('input', (e) => {
     const v = e.target.value;
     qMini.value = v;
+    syncSearchClear();
     renderSuggest();
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => { state.q = v.trim(); state.page = 1; renderResults(); }, 140);
@@ -721,8 +743,19 @@ function bindStationEvents() {
   qMini.addEventListener('input', (e) => {
     const v = e.target.value;
     q.value = v;
+    syncSearchClear();
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => { state.q = v.trim(); state.page = 1; renderResults(); }, 140);
+  });
+  $('#clearSearchBtn')?.addEventListener('click', () => {
+    q.value = '';
+    qMini.value = '';
+    syncSearchClear();
+    closeSuggest();
+    state.q = '';
+    state.page = 1;
+    renderResults();
+    q.focus();
   });
 
   q.addEventListener('keydown', (e) => {
@@ -774,7 +807,7 @@ function bindStationEvents() {
     state.page = 1;
     renderResults();
   });
-  $('#quickChips').addEventListener('click', (e) => {
+  $('#quickChips')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-q]');
     if (btn) applySearch(btn.dataset.q);
   });
@@ -1428,6 +1461,7 @@ if (isStationPage) {
 applyTheme(document.documentElement.dataset.theme || 'light');
 bindGlobalEvents();
 initScrollUI();
+trackVisit();
 
 if (isJurPage) {
   applyJurURL();

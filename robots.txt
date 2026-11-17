@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://ps-locator.prajamwan.workers.dev/sitemap.xml

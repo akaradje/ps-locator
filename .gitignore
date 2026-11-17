@@ -3,3 +3,4 @@
 .workbuddy-ai/
 __pycache__/
 *.pyc
+.wrangler/
