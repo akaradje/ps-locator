@@ -1136,11 +1136,17 @@ function moveJurSug(delta) {
   $('#jurQ').setAttribute('aria-activedescendant', rows[next].id);
 }
 
+function syncJurClear() {
+  const qEl = $('#jurQ'), btn = $('#clearJurBtn');
+  if (qEl && btn) btn.hidden = qEl.value.length === 0;
+}
+
 function jurSearch(qRaw, opts = {}) {
   if (!jurState.data) { loadJurisdiction().then(() => jurSearch(qRaw, opts)).catch(jurisLoadFailed); return; }
   const q = String(qRaw ?? '').trim();
   jurParams.q = q;
   $('#jurQ').value = q;
+  syncJurClear();
   closeJurSuggest();
   if (!q) { jurState.results = []; renderJurIdle(); syncURL(); return; }
   const { hits, addrHits, exact } = jurFindCandidates(q);
@@ -1381,7 +1387,14 @@ function bindJurisdictionEvents() {
 
   /* ค้นหาเขตอำนาจ */
   $('#jurForm').addEventListener('submit', (e) => { e.preventDefault(); jurSearch($('#jurQ').value); });
-  $('#jurQ').addEventListener('input', () => { loadJurisdiction().then(renderJurSuggest).catch(jurisLoadFailed); });
+  $('#jurQ').addEventListener('input', () => { syncJurClear(); loadJurisdiction().then(renderJurSuggest).catch(jurisLoadFailed); });
+  $('#clearJurBtn')?.addEventListener('click', () => {
+    $('#jurQ').value = '';
+    syncJurClear();
+    closeJurSuggest();
+    jurSearch('', { silent: true });
+    $('#jurQ').focus();
+  });
   $('#jurQ').addEventListener('keydown', (e) => {
     const open = !$('#jurSuggest').hidden;
     if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) renderJurSuggest(); else moveJurSug(1); }
