@@ -171,6 +171,7 @@
           </div>
         </div>
       </form>
+      <p class="search-hint" id="searchHint">กด Enter ดูรายละเอียด · Ctrl+Enter คัดลอกที่อยู่เลย</p>
 
       <div class="stats" aria-label="สถิติข้อมูล">
         <div class="stat"><b class="mono" id="statStations">—</b><span>สถานีทั่วประเทศ</span></div>
@@ -301,6 +302,10 @@
         <div class="detail-cell"><label>กองบัญชาการ</label><div class="v" id="dRegion">—</div></div>
         <div class="detail-cell full"><label>เว็บไซต์ทางการ</label><a class="v" id="dWebsite" href="#" target="_blank" rel="noopener">—</a></div>
       </div>
+      <div class="copy-preview">
+        <div class="copy-preview-head"><b>ข้อความที่จะคัดลอก</b><small>ข้อความล้วน · ไม่มีลิงก์ ที่มา หรือเบอร์โทร · ข้อมูล ณ 16 พฤศจิกายน 2569</small></div>
+        <pre class="copy-pre" id="dCopyPreview">—</pre>
+      </div>
       <div class="map-frame"><iframe id="dMap" title="แผนที่สถานีตำรวจ" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="about:blank"></iframe></div>
     </div>
     <div class="modal-foot">
@@ -308,6 +313,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M4 16V5a2 2 0 0 1 2-2h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
         คัดลอกที่อยู่
       </button>
+      <a class="btn btn-ghost" id="dReport" href="mailto:akaradje07@gmail.com" target="_blank" rel="noopener">แจ้งที่อยู่ไม่ถูกต้อง</a>
       <a class="btn btn-outline" id="dNavigate" href="#" target="_blank" rel="noopener">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2 4 22l8-4 8 4-8-20Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
         นำทางใน Google Maps

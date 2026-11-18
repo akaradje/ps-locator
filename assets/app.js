@@ -329,7 +329,9 @@ function cardHTML(st, i) {
     </div>
     <div class="card-actions">
       <a class="icon-btn icon-btn-primary" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">${icon.nav}นำทาง</a>
-      <button class="icon-btn" type="button" data-copy="${st.id}">${icon.copy}คัดลอก</button>
+      ${hasAddress(st)
+        ? `<button class="icon-btn" type="button" data-copy="${st.id}">${icon.copy}คัดลอก</button>`
+        : `<button class="icon-btn" type="button" disabled title="ต้นทางยังไม่มีที่อยู่ — เปิดรายละเอียดเพื่อแจ้ง">${icon.copy}ไม่มีที่อยู่</button>`}
       <button class="icon-btn" type="button" data-print-one="${st.id}">${icon.print}พิมพ์</button>
       <button class="icon-btn ${saved ? 'is-saved' : ''}" type="button" data-save="${st.id}" aria-pressed="${saved}" aria-label="${saved ? 'เลิกบันทึก' : 'บันทึก'} ${esc(st.name)}">${icon.bookmark}${saved ? 'บันทึกแล้ว' : 'บันทึก'}</button>
     </div>
@@ -462,10 +464,14 @@ function renderSuggest() {
   } else {
     const rows = items.map((it, i) => {
       const st = it.st;
+      const addr = hasAddress(st);
       return `<div class="sug-row" role="option" id="sug-${i}" data-sug="${st.id}" aria-selected="false">
         <span class="sug-name">${hl(st.name, qRaw)}</span>
         <span class="sug-phone">${esc(formatPhoneDisplay(st.phone) || '—')}</span>
-        <span class="sug-sub">${esc(st.province_th)} · ${esc(REGION_SHORT[st.region] || '-')}</span>
+        ${addr
+          ? `<button class="sug-copy" type="button" data-sug-copy="${st.id}" aria-label="คัดลอกที่อยู่ ${esc(st.name)}" title="คัดลอกที่อยู่ ${esc(st.name)} · Ctrl+Enter">${icon.copy}</button>`
+          : `<span class="sug-copy sug-copy-na" title="ต้นทางยังไม่มีที่อยู่">${icon.copy}</span>`}
+        <span class="sug-sub">${esc(st.province_th)} · ${esc(REGION_SHORT[st.region] || '-')}${addr ? '' : ' · <b class="na-badge">ไม่มีที่อยู่</b>'}</span>
       </div>`;
     }).join('');
     panel.innerHTML = `<div class="suggest-list">${rows}</div>
@@ -559,32 +565,115 @@ function resetFilters() {
 let toastTimer;
 function showToast(msg) {
   const toast = $('#toast');
+  if (!toast) return;
   toast.textContent = msg;
   toast.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
 }
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); showToast('คัดลอกลงคลิปบอร์ดแล้ว'); return true; }
-  catch {
+
+/* ข้อมูลที่อยู่จากต้นทางเป็นข้อความยาวบรรทัดเดียว — ใช้ตามเดิม ไม่ตัดคำ ไม่เดารหัสไปรษณีย์
+   (รหัสไปรษณีย์เป็นเลขอารบิกอยู่ท้ายข้อความอยู่แล้ว) · ไม่ใส่ลิงก์/ที่มา/อีโมจิ/เบอร์โทร
+   เพื่อให้วางลงแม่แบบซองหรือหนังสือแล้วใช้ได้เลย */
+const hasAddress = (st) => !!(st && String(st.address || '').trim());
+function envelopeCopyText(st) {
+  const addr = String(st.address || '').trim();
+  return addr ? `${st.name}\n${addr}` : st.name;
+}
+const reportURL = (st) => 'mailto:akaradje07@gmail.com?subject=' +
+  encodeURIComponent('แจ้งที่อยู่ไม่ถูกต้อง — ' + st.name) + '&body=' +
+  encodeURIComponent(`สถานี: ${st.name}\nจังหวัด: ${st.province_th}\nที่อยู่จากระบบ: ${st.address || 'ไม่มีข้อมูล'}\n\nที่อยู่ที่ถูกต้องควรเป็น:\n`);
+
+async function copyText(text, successMsg) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(successMsg || 'คัดลอกลงคลิปบอร์ดแล้ว');
+    return true;
+  } catch {
+    /* ทางสำรองสำหรับเบราว์เซอร์ในแอป (เช่น เปิดลิงก์จาก LINE) หรือเบราว์เซอร์รุ่นเก่า */
     const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
     let ok = false;
-    try { ok = document.execCommand('copy'); showToast(ok ? 'คัดลอกลงคลิปบอร์ดแล้ว' : 'คัดลอกไม่สำเร็จ'); } catch { showToast('คัดลอกไม่สำเร็จ'); }
+    try { ok = document.execCommand('copy'); } catch { /* ignore */ }
     ta.remove();
+    showToast(ok ? (successMsg || 'คัดลอกลงคลิปบอร์ดแล้ว') : 'คัดลอกไม่สำเร็จ — เปิดกล่องให้กดคัดลอกเอง');
     return ok;
   }
 }
+
+/* เรียกตรงจากเหตุการณ์คลิก/คีย์ — ไม่ await งานอื่นก่อนคัดลอก (Safari นับว่าผู้ใช้เป็นคนกด) */
+async function copyStation(st, btn) {
+  if (!st) return false;
+  if (!hasAddress(st)) {
+    showToast(`${st.name} ยังไม่มีที่อยู่จากต้นทาง — กรุณาแจ้งที่อยู่`);
+    return false;
+  }
+  const ok = await copyText(envelopeCopyText(st), `คัดลอกที่อยู่ ${st.name} · ${st.province_th} แล้ว`);
+  if (ok) { if (btn) flashCopied(btn); }
+  else openManualCopy(envelopeCopyText(st));
+  return ok;
+}
+
 function flashCopied(btn) {
   if (!btn) return;
   const orig = btn.innerHTML;
   btn.classList.add('is-copied');
   btn.innerHTML = icon.check + 'คัดลอกแล้ว';
   clearTimeout(btn._copyTimer);
-  btn._copyTimer = setTimeout(() => { btn.classList.remove('is-copied'); btn.innerHTML = orig; }, 1600);
+  btn._copyTimer = setTimeout(() => { btn.classList.remove('is-copied'); btn.innerHTML = orig; }, 2400);
 }
-const stationCopyText = (st) => `${st.name}\n${st.address}\nโทร ${formatPhoneDisplay(st.phone) || '-'}`;
+
+/* ทางสำรองสุดท้าย: เปิดกล่องที่มีข้อความเลือกไว้แล้ว ให้กด Ctrl+C หรือแตะค้างเอง
+   ห้ามแจ้งว่า "คัดลอกแล้ว" ถ้าทั้ง navigator.clipboard และ execCommand ล้มเหลว */
+let manualCopyEl = null;
+function closeManualCopy() {
+  if (!manualCopyEl) return;
+  const el = manualCopyEl, restore = el._restore;
+  manualCopyEl = null;
+  el.remove();
+  if (restore && restore.focus) restore.focus();
+}
+function openManualCopy(text) {
+  closeManualCopy();
+  const restore = document.activeElement;
+  const ov = document.createElement('div');
+  ov.className = 'manual-copy';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.setAttribute('aria-labelledby', 'manualCopyTitle');
+  ov.innerHTML = `
+    <div class="manual-copy-box">
+      <div class="manual-copy-head">
+        <div><h2 id="manualCopyTitle">คัดลอกที่อยู่ด้วยตนเอง</h2>
+        <p>เบราว์เซอร์นี้ไม่อนุญาตให้คัดลอกอัตโนมัติ — กดปุ่มด้านล่างแล้วใช้ Ctrl+C (หรือแตะข้อความค้างแล้วเลือก “คัดลอก”)</p></div>
+        <button type="button" class="modal-close" id="manualCopyClose" aria-label="ปิดกล่องคัดลอก">×</button>
+      </div>
+      <textarea id="manualCopyText" readonly aria-label="ข้อความที่อยู่ที่เลือกไว้แล้ว"></textarea>
+      <div class="manual-copy-foot"><button type="button" class="btn btn-primary" id="manualCopySelect">เลือกข้อความอีกครั้ง</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  manualCopyEl = ov;
+  ov._restore = restore;
+  const ta = $('#manualCopyText', ov);
+  ta.value = text;
+  const selectAll = () => { ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); };
+  $('#manualCopyClose', ov).addEventListener('click', closeManualCopy);
+  $('#manualCopySelect', ov).addEventListener('click', selectAll);
+  ov.addEventListener('click', (e) => { if (e.target === ov) closeManualCopy(); });
+  ov.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeManualCopy(); return; }
+    if (e.key !== 'Tab') return;
+    const first = $('#manualCopyClose', ov), last = $('#manualCopySelect', ov);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  selectAll();
+}
 
 /* ---------- Modal ---------- */
 const modal = $('#stationModal');
@@ -614,12 +703,20 @@ function openStationModal(id) {
   dSave.textContent = state.saved.has(st.id) ? 'บันทึกแล้ว ✓' : 'บันทึกสถานีนี้';
   dSave.dataset.id = st.id;
   $('#dPrint').dataset.id = st.id;
-  $('#dCopy').dataset.id = st.id;
+  const addr = hasAddress(st);
+  const copyBtn = $('#dCopy');
+  copyBtn.dataset.id = st.id;
+  copyBtn.disabled = !addr;
+  copyBtn.setAttribute('aria-describedby', 'dCopyPreview');
+  /* ตัวอย่างต้องตรงกับข้อความที่จะคัดลอกทุกตัวอักษร */
+  $('#dCopyPreview').textContent = addr ? envelopeCopyText(st) : 'ต้นทางยังไม่มีที่อยู่สำหรับสถานีนี้ — กรุณาแจ้งที่อยู่';
+  $('#dReport').href = reportURL(st);
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   modal.removeAttribute('inert');
   document.body.style.overflow = 'hidden';
-  $('#modalClose').focus();
+  /* งานหลักคือคัดลอกที่อยู่ → กด Enter อีกครั้งได้เลย (ถ้าไม่มีที่อยู่ ให้โฟกัสปุ่มปิด) */
+  (addr ? copyBtn : $('#modalClose')).focus();
 }
 function closeStationModal() {
   modal.classList.remove('open');
@@ -761,6 +858,14 @@ function bindStationEvents() {
   q.addEventListener('keydown', (e) => {
     const panel = $('#suggestPanel');
     const open = !panel.hidden;
+    /* Ctrl+Enter / ⌘+Enter — คัดลอกแถวที่ไฮไลต์อยู่ (ถ้ายังไม่ได้กด ↑↓ ให้เอาอันดับแรก) */
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      if (!open && q.value.trim()) renderSuggest();
+      const pick = (sugState.active >= 0 && sugState.items[sugState.active]) || sugState.items[0];
+      if (pick) copyStation(pick.st);
+      return;
+    }
     if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) renderSuggest(); else moveSugActive(1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); if (open) moveSugActive(-1); }
     else if (e.key === 'Enter') {
@@ -775,6 +880,8 @@ function bindStationEvents() {
   $('#searchForm').addEventListener('submit', (e) => { e.preventDefault(); applySearch(q.value); });
 
   $('#suggestPanel').addEventListener('click', (e) => {
+    const cp = e.target.closest('[data-sug-copy]');
+    if (cp) { const st = STATIONS.find(s => s.id === +cp.dataset.sugCopy); if (st) copyStation(st, cp); return; }
     const row = e.target.closest('[data-sug]');
     if (row) { openStationModal(+row.dataset.sug); return; }
     if (e.target.closest('#sugAll')) applySearch(q.value);
@@ -832,7 +939,7 @@ function bindStationEvents() {
     const detailBtn = e.target.closest('[data-open-detail]');
     if (detailBtn) return openStationModal(+detailBtn.dataset.openDetail);
     const copyBtn = e.target.closest('[data-copy]');
-    if (copyBtn) { const st = STATIONS.find(s => s.id === +copyBtn.dataset.copy); if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(copyBtn)); return; }
+    if (copyBtn) { const st = STATIONS.find(s => s.id === +copyBtn.dataset.copy); if (st) copyStation(st, copyBtn); return; }
     const printBtn = e.target.closest('[data-print-one]');
     if (printBtn) { const st = STATIONS.find(s => s.id === +printBtn.dataset.printOne); if (st) printStation(st); return; }
     const saveBtn = e.target.closest('[data-save]');
@@ -868,7 +975,7 @@ function bindGlobalEvents() {
   $('#dCopy').addEventListener('click', (e) => {
     const btn = e.currentTarget;
     const st = STATIONS.find(s => s.id === +btn.dataset.id);
-    if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(btn));
+    if (st) copyStation(st, btn);
   });
   $('#dPrint').addEventListener('click', (e) => {
     const st = STATIONS.find(s => s.id === +e.currentTarget.dataset.id);
@@ -903,6 +1010,9 @@ function bindGlobalEvents() {
       if (target) { target.focus(); target.select(); }
     } else if (e.key === 'Escape' && modal.classList.contains('open')) {
       closeStationModal();
+      /* กลับไปช่องค้นหาพร้อมเลือกคำเดิมไว้ — พิมพ์ชื่อสถานีต่อได้ทันทีโดยไม่ต้องลบ */
+      const q = $('#q');
+      if (q) { q.focus(); q.select(); }
     }
   });
 
@@ -1203,7 +1313,9 @@ function jurResultCard(item, q) {
     <div class="jur-meta"><span>${esc(st.address || 'ไม่มีข้อมูลที่อยู่')}</span>${jurPhoneLink(st)}</div>
     <div class="jur-actions">
       <button class="btn btn-primary btn-sm" type="button" data-jur-detail="${rec.id}">ดูรายละเอียดสถานี</button>
-      <button class="btn btn-outline btn-sm" type="button" data-jur-copy="${rec.id}">คัดลอกข้อมูลสถานี</button>
+      ${hasAddress(st)
+        ? `<button class="btn btn-outline btn-sm" type="button" data-jur-copy="${rec.id}">คัดลอกที่อยู่</button>`
+        : `<button class="btn btn-outline btn-sm" type="button" disabled title="ต้นทางยังไม่มีที่อยู่">ไม่มีที่อยู่</button>`}
       <button class="btn btn-outline btn-sm" type="button" data-jur-print="${rec.id}">พิมพ์ใบตรวจสอบเขตอำนาจ</button>
       <a class="btn btn-outline btn-sm" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">นำทางไปโรงพัก</a>
     </div>
@@ -1224,7 +1336,9 @@ function jurAddressCard(h, q) {
     <p class="jur-warn">รายการนี้เป็น <b>ตำบล/แขวงที่ตั้งสถานีตามที่อยู่</b> ไม่ใช่บัญชีเขตอำนาจตามประกาศ (ส่วนใหญ่เป็น สน. ในกรุงเทพมหานคร ซึ่งประกาศกำหนดเขตด้วยแนวถนน/คลอง) โปรดตรวจสอบกับสถานีโดยตรงก่อนดำเนินการทางคดี</p>
     <div class="jur-actions">
       <button class="btn btn-primary btn-sm" type="button" data-jur-detail="${st.id}">ดูรายละเอียดสถานี</button>
-      <button class="btn btn-outline btn-sm" type="button" data-jur-copy="${st.id}">คัดลอกข้อมูลสถานี</button>
+      ${hasAddress(st)
+        ? `<button class="btn btn-outline btn-sm" type="button" data-jur-copy="${st.id}">คัดลอกที่อยู่</button>`
+        : `<button class="btn btn-outline btn-sm" type="button" disabled title="ต้นทางยังไม่มีที่อยู่">ไม่มีที่อยู่</button>`}
       <a class="btn btn-outline btn-sm" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">นำทางไปโรงพัก</a>
     </div>
   </article>`;
@@ -1419,7 +1533,7 @@ function bindJurisdictionEvents() {
     const copy = e.target.closest('[data-jur-copy]');
     if (copy) {
       const st = ST_BY_ID.get(+copy.dataset.jurCopy);
-      if (st) copyText(stationCopyText(st)).then(ok => ok && flashCopied(copy));
+      if (st) copyStation(st, copy);
       return;
     }
     const detail = e.target.closest('[data-jur-detail]');
@@ -1486,4 +1600,16 @@ if (isJurPage) {
   updateSavedUI();
   bindStationEvents();
   renderResults();
+  const hint = $('#searchHint');
+  if (hint) {
+    const mac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+    hint.textContent = mac
+      ? 'กด Enter ดูรายละเอียด · ⌘+Enter คัดลอกที่อยู่เลย'
+      : 'กด Enter ดูรายละเอียด · Ctrl+Enter คัดลอกที่อยู่เลย';
+  }
+  /* เดสก์ท็อป: ช่องค้นหาพร้อมพิมพ์ตั้งแต่เปิดหน้า (ข้ามกรณีมี hash เพื่อไม่ให้เลื่อนตำแหน่ง) */
+  if (!window.location.hash && matchMedia('(min-width: 900px)').matches) {
+    $('#q').focus();
+    if (new URLSearchParams(window.location.search).get('q')) $('#q').select();
+  }
 }
