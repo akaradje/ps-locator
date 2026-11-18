@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#10151D">
+<meta name="theme-color" content="#05070c">
 <meta name="author" content="ผู้ช่วยพนักงานสอบสวน สภ.เมืองชุมพร">
 <title>PS Locator — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง | ค้นหาที่อยู่ เบอร์โทร สน./สภ. ทุกจังหวัด</title>
-<meta name="description" content="ค้นหาสถานีตำรวจ (สน./สภ.) ทั่วประเทศไทยครบ 1,484 แห่ง 77 จังหวัด พร้อมที่อยู่ เบอร์โทรศัพท์ โทรสาร เว็บไซต์ และแผนที่นำทาง สำหรับพนักงานสอบสวนและประชาชน ข้อมูลยืนยันจากสำนักงานตำรวจแห่งชาติ (royalthaipolice.go.th)">
+<meta name="description" content="ค้นหาสถานีตำรวจ (สน./สภ.) ทั่วประเทศไทยครบ 1,484 แห่ง 77 จังหวัด พร้อมที่อยู่ เบอร์โทรศัพท์ โทรสาร เว็บไซต์ สำหรับพนักงานสอบสวนและประชาชน ข้อมูลยืนยันจากสำนักงานตำรวจแห่งชาติ">
 <meta name="keywords" content="สถานีตำรวจ, ค้นหาสถานีตำรวจ, ที่อยู่ สน., ที่อยู่ สภ., เบอร์โทรสถานีตำรวจ, สารบบสถานีตำรวจ, สถานีตำรวจทั่วประเทศ, 77 จังหวัด, สำนักงานตำรวจแห่งชาติ, พนักงานสอบสวน, เขตอำนาจสอบสวน, PS Locator">
 <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
 <link rel="canonical" href="https://ps-locator.prajamwan.workers.dev/">
@@ -18,8 +18,8 @@
 <link rel="stylesheet" href="assets/styles.css">
 <script>
 (function () {
-  var t = 'light';
-  try { t = localStorage.getItem('ps:theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (e) {}
+  var t = 'dark';
+  try { t = localStorage.getItem('ps:theme') || 'dark'; } catch (e) {}
   document.documentElement.dataset.theme = t;
 })();
 </script>
@@ -28,12 +28,11 @@
 <meta property="og:site_name" content="PS Locator">
 <meta property="og:url" content="https://ps-locator.prajamwan.workers.dev/">
 <meta property="og:title" content="PS Locator — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง">
-<meta property="og:description" content="ค้นหาที่อยู่ สน./สภ. พร้อมโทรศัพท์ โทรสาร เว็บไซต์ และแผนที่นำทาง ทั่วประเทศไทยครบ 77 จังหวัด อ้างอิงข้อมูลจากสำนักงานตำรวจแห่งชาติ">
+<meta property="og:description" content="ค้นหาที่อยู่ สน./สภ. พร้อมโทรศัพท์ โทรสาร เว็บไซต์ ทั่วประเทศไทยครบ 77 จังหวัด อ้างอิงข้อมูลจากสำนักงานตำรวจแห่งชาติ">
 <meta property="og:image" content="https://ps-locator.prajamwan.workers.dev/assets/ps-locator-poster.png">
-<meta property="og:image:alt" content="PS Locator สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง 77 จังหวัด">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="PS Locator — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง">
-<meta name="twitter:description" content="ค้นหาที่อยู่ เบอร์โทร แผนที่นำทาง สน./สภ. ทั่วประเทศ 77 จังหวัด พิมพ์แนบเอกสารคดีได้ทันที">
+<meta name="twitter:description" content="ค้นหาที่อยู่ เบอร์โทร สน./สภ. ทั่วประเทศ 77 จังหวัด พิมพ์แนบเอกสารคดีได้ทันที">
 <meta name="twitter:image" content="https://ps-locator.prajamwan.workers.dev/assets/ps-locator-poster.png">
 <script type="application/ld+json">
 {
@@ -46,7 +45,7 @@
       "name": "PS Locator — สารบบสถานีตำรวจทั่วประเทศ",
       "alternateName": ["สารบบสถานีตำรวจ", "PS Locator"],
       "inLanguage": "th",
-      "description": "ค้นหาที่อยู่ เบอร์โทร โทรสาร เว็บไซต์ และแผนที่นำทางของ สน./สภ. ทั่วประเทศไทย 1,484 แห่ง 77 จังหวัด",
+      "description": "ค้นหาที่อยู่ เบอร์โทรศัพท์ โทรสาร และสังกัดกองบัญชาการของ สน./สภ. ทั่วประเทศไทย 1,484 แห่ง 77 จังหวัด",
       "potentialAction": {
         "@type": "SearchAction",
         "target": "https://ps-locator.prajamwan.workers.dev/?q={search_term_string}",
@@ -78,265 +77,124 @@
 </script>
 </head>
 <body>
-
 <noscript>
-  <div style="padding:24px; text-align:center; font-family:Sarabun, sans-serif; background:#FDF6EC; border-bottom:1px solid #E5D28A">
+  <div style="padding:24px; text-align:center; font-family:Sarabun, sans-serif; background:#FDF6EC; color:#171E29">
     <b>PS Locator ต้องใช้ JavaScript</b><br>
     เว็บไซต์นี้ทำงานในเบราว์เซอร์ของคุณโดยตรง หากต้องการดูข้อมูลสถานีโดยไม่เปิดใช้ JavaScript โปรดใช้เว็บทางการของสำนักงานตำรวจแห่งชาติ:
     <a href="https://www.royalthaipolice.go.th/th/police-stations">royalthaipolice.go.th — ข้อมูลสถานีตำรวจ</a>
   </div>
 </noscript>
+<a class="skip-link" href="#resultsList">ข้ามไปยังผลการค้นหา</a>
 
-<a class="skip-link" href="#results">ข้ามไปยังผลการค้นหา</a>
+<canvas id="spatial-canvas" aria-hidden="true"></canvas>
+<div class="ambient-aura" aria-hidden="true"></div>
 
-<!-- ════════ TOP UTILITY BAR ════════ -->
-<div class="topbar" role="complementary" aria-label="ข้อมูลหน่วยงานและสายด่วน">
-  <div class="wrap">
-    <span class="src">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 9.4 8 10 4.6-.6 8-5 8-10V6l-8-4Z" stroke="#C9A227" stroke-width="1.6" stroke-linejoin="round"/></svg>
-      <span class="txt">ข้อมูลอ้างอิงจาก <a href="https://www.royalthaipolice.go.th/th/police-stations" target="_blank" rel="noopener">royalthaipolice.go.th</a> — สำนักงานตำรวจแห่งชาติ</span>
-    </span>
-    <nav class="hotline" aria-label="สายด่วน">
-      <span>เหตุด่วนเหตุร้าย <a href="tel:191" class="mono"><b>191</b></a></span>
-      <span>แจ้งเบาะแส ตร. <a href="tel:1599" class="mono"><b>1599</b></a></span>
-    </nav>
-  </div>
-</div>
-
-<!-- ════════ HEADER ════════ -->
-<header class="header">
-  <div class="wrap">
-    <a class="brand" href="#">
-      <svg class="brand-emblem" viewBox="0 0 64 64" role="img" aria-label="ตราสัญลักษณ์ PS Locator">
-        <circle cx="32" cy="32" r="30" fill="#7E1F1A"/>
-        <circle cx="32" cy="32" r="24.5" fill="none" stroke="#C9A227" stroke-width="1.6"/>
-        <circle cx="32" cy="32" r="21.5" fill="none" stroke="#C9A227" stroke-width="0.7" stroke-opacity=".6"/>
-        <path d="M32 12l3.1 6.3 6.9 1-5 4.9 1.2 6.9L32 30.2 25.8 33.5l1.2-6.9-5-4.9 6.9-1L32 12Z" fill="#C9A227"/>
-        <path d="M20 44h24M24 48.5h16" stroke="#F7F6F2" stroke-width="2" stroke-linecap="round"/>
+<header class="top-chrome">
+  <a class="brand-link" href="https://github.com/akaradje/ps-locator" target="_blank" rel="noopener" title="ดูโค้ดบน GitHub">
+    <span class="brand-dot" aria-hidden="true"></span>
+    <span>PS LOCATOR</span>
+  </a>
+  <div class="chrome-actions">
+    <button type="button" id="theme-toggle" class="icon-pill" aria-label="สลับโหมดสีหน้าจอ" title="สลับโหมดมืด / สว่าง">
+      <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.6 1.6"></path>
       </svg>
-      <span>
-        <span class="brand-name">PS<em>&nbsp;Locator</em></span>
-        <span class="brand-tag">สารบบสถานีตำรวจทั่วประเทศไทย</span>
-      </span>
-    </a>
-    <div class="mini-search" id="miniSearch">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <input type="search" id="qMini" placeholder="ค้นหาสถานีตำรวจ / จังหวัด…" autocomplete="off" spellcheck="false" aria-label="ค้นหาด่วนสถานีตำรวจ">
-    </div>
-    <nav class="nav" aria-label="เมนูหลัก">
-      <a class="nav-link" href="#results">ค้นหา</a>
-      <a class="nav-link nav-switch" href="jurisdiction.html">เขตอำนาจ</a>
-      <a class="nav-link" href="#howto">วิธีใช้</a>
-      <a class="nav-link" href="#about-sources">แหล่งข้อมูล</a>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="สลับโหมดสว่าง/มืด" aria-pressed="false" title="สลับธีม สว่าง/มืด">
-        <svg class="i-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4 19 19M19 5l-1.6 1.6M6.6 17.4 5 19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-        <svg class="i-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 13.2A8.1 8.1 0 0 1 10.8 4 8.1 8.1 0 1 0 20 13.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="btn btn-dark btn-sm" id="printListBtn" type="button" title="พิมพ์บัญชีรายนามสถานีตามตัวกรองปัจจุบัน (A4)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
-        <span class="print-label">พิมพ์รายงาน</span>
-      </button>
-    </nav>
+      <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+    </button>
   </div>
 </header>
 
-<!-- ════════ HERO + SEARCH ════════ -->
-<section class="hero" aria-labelledby="hero-title">
-  <div class="wrap">
-    <div>
-      <span class="kicker">เครื่องมือของพนักงานสอบสวน</span>
-      <h1 id="hero-title">ที่อยู่ <span class="hl">สน./สภ.</span> ทั่วประเทศ<br>ค้นเจอในไม่กี่วินาที</h1>
-      <p class="lede">ค้นหาสถานีตำรวจครบทุกแห่งทั่วราชอาณาจักร — <b>ที่อยู่สายด่วน โทรศัพท์ โทรสาร เว็บไซต์ และแผนที่นำทาง</b> พร้อมระบุภาคและจังหวัด พิมพ์แนบเอกสารคดีได้ทันที</p>
+<main class="stage">
+  <div id="searchHub" class="search-hub">
+    <div class="orbital-ring" aria-hidden="true"></div>
 
-      <form class="searchbox" id="searchForm" role="search">
-        <div class="field" id="searchField">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input type="search" id="q" name="q" placeholder="พิมพ์ชื่อสถานี จังหวัด หรือที่อยู่ เช่น บางรัก, เชียงใหม่, กาญจนบุรี…" autocomplete="off" aria-label="คำค้นหาสถานีตำรวจ" aria-autocomplete="list" aria-controls="suggestPanel" aria-expanded="false" spellcheck="false">
-          <button type="button" class="field-clear" id="clearSearchBtn" aria-label="ล้างคำค้นหา" hidden>×</button>
-          <kbd class="kbd" id="searchKbd">/</kbd>
-          <div class="suggest" id="suggestPanel" role="listbox" aria-label="คำแนะนำสถานีตำรวจ" hidden></div>
-        </div>
-        <div class="combo" id="provinceCombo">
-          <button type="button" class="combo-btn" id="provinceBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="provincePop" aria-label="กรองตามจังหวัด">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/></svg>
-            <span class="combo-label" id="provinceLabel">ทุกจังหวัด (77)</span>
-            <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <div class="combo-pop" id="provincePop" hidden>
-            <div class="combo-search">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.8-3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-              <input type="text" id="provinceSearch" placeholder="พิมพ์ชื่อจังหวัด…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="provinceList" aria-autocomplete="list" aria-label="ค้นหาจังหวัด">
-            </div>
-            <ul class="combo-list" id="provinceList" role="listbox" aria-label="รายชื่อจังหวัด"></ul>
+    <form id="searchForm" autocomplete="off" novalidate role="search">
+      <div id="capsuleTilt" class="capsule-tilt">
+        <div id="searchCapsule" class="search-capsule">
+          <div class="capsule-beam" aria-hidden="true"></div>
+          <div id="capsuleSpotlight" class="capsule-spotlight" aria-hidden="true"></div>
+          <div class="scan-progress" aria-hidden="true"></div>
+
+          <span class="search-leading-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </span>
+          <input id="searchInput" class="search-input" type="text" placeholder="ค้นหาสถานีตำรวจ พื้นที่ จังหวัด หรือหมายเลขโทรศัพท์..." aria-label="ค้นหาสถานีตำรวจ" autofocus>
+          <div class="capsule-controls">
+            <span class="kbd-hint" aria-hidden="true">/</span>
+            <button type="button" id="clearBtn" class="capsule-action-btn clear-btn" aria-label="ล้างคำค้นหาและกลับสู่หน้าแรก" title="ล้างคำค้นหา (Esc)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <button type="button" id="voiceBtn" class="capsule-action-btn" aria-label="ค้นหาด้วยเสียง" title="ค้นหาด้วยเสียง" style="display:none">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            </button>
+            <button type="submit" id="submitBtn" class="submit-orb" aria-label="เริ่มค้นหา" title="ค้นหา (Enter)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </button>
           </div>
         </div>
-      </form>
-      <p class="search-hint" id="searchHint">กด Enter ดูรายละเอียด · Ctrl+Enter คัดลอกที่อยู่เลย</p>
-
-      <div class="stats" aria-label="สถิติข้อมูล">
-        <div class="stat"><b class="mono" id="statStations">—</b><span>สถานีทั่วประเทศ</span></div>
-        <div class="stat"><b class="mono" id="statProvinces">77</b><span>จังหวัด</span></div>
-        <div class="stat"><b class="mono">10</b><span>กองบัญชาการ (บช.น. + ภ.1–9)</span></div>
-        <div class="stat"><b class="mono" id="statVisitors">—</b><span>ผู้เข้าใช้งาน (<span id="statViews">—</span> ครั้ง)</span></div>
       </div>
-    </div>
+    </form>
 
-    <!-- Source-of-truth dossier card -->
-    <aside class="dossier" id="about-sources" aria-label="บัตรข้อมูลแหล่งที่มาของข้อมูล">
-      <div class="dossier-head">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="#C9A227" stroke-width="1.5"/><path d="M9 8h6M9 12h6M9 16h4" stroke="#C9A227" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <h2>บัตรรับรองแหล่งข้อมูล</h2>
-        <span class="stamp">VERIFIED</span>
-      </div>
-      <dl class="dossier-body">
-        <div class="dossier-row"><dt>แหล่งที่มา</dt><dd>สำนักงานตำรวจแห่งชาติ<small>เว็บไซต์ <a href="https://www.royalthaipolice.go.th/th/police-stations" target="_blank" rel="noopener" style="color:var(--red)">royalthaipolice.go.th</a> · เมนู “ข้อมูลสถานีตำรวจ”</small></dd></div>
-        <div class="dossier-row"><dt>วิธีรวบรวม</dt><dd>รวบรวมจากระบบเปิดเผยข้อมูลของ ตร. โดยตรงทุกรายการ<small>ชื่อสถานี · ที่อยู่ · โทรศัพท์ · โทรสาร · เว็บไซต์ทางการ</small></dd></div>
-        <div class="dossier-row"><dt>สถานะข้อมูล</dt><dd><span class="verify-pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>ยืนยันจากต้นทาง</span><small>ปรับปรุงล่าสุด 16 พฤศจิกายน 2569</small></dd></div>
-        <div class="dossier-row"><dt>ข้อควรทราบ</dt><dd style="font-weight:400">ข้อมูลใช้เพื่ออำนวยความสะดวกในการปฏิบัติงาน หากพบความคลาดเคลื่อน กรุณาตรวจสอบกับสถานีโดยตรง หรือแจ้ง <a href="mailto:akaradje07@gmail.com?subject=แจ้งข้อมูลคลาดเคลื่อน — PS Locator" style="color:var(--red)">akaradje07@gmail.com</a></dd></div>
-      </dl>
-    </aside>
+    <!-- อยู่นอก capsule-tilt → กางลงมาอิสระ ไม่เบี้ยว ไม่ถูกตัดขอบ -->
+    <div id="suggestPanel" class="suggest-dropdown panel-glass" role="listbox" aria-label="คำแนะนำสถานีตำรวจ" hidden></div>
+    <div id="inlineStatus" class="inline-status" role="status" aria-live="polite"></div>
   </div>
-</section>
 
-<!-- ════════ RESULTS ════════ -->
-<main id="results" class="section-results" aria-label="ผลการค้นหาสถานีตำรวจ">
-  <div class="wrap-x">
-
-    <div class="region-scroll" role="group" aria-label="กรองตามกองบัญชาการ">
-      <div class="region-chips" id="regionChips"></div>
+  <section id="resultsWorkspace" class="results-workspace" aria-label="ผลการค้นหาสถานีตำรวจ">
+    <div class="panel-glass results-list-panel">
+      <div class="panel-header">
+        <span id="resultsLabel">ผลการค้นหา</span>
+        <div class="compact-pill-controls">
+          <div class="region-chips" id="regionChips" role="group" aria-label="กรองตามกองบัญชาการ"></div>
+          <div class="combo" id="provinceCombo">
+            <button type="button" class="combo-btn" id="provinceBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="provincePop" aria-label="กรองตามจังหวัด">
+              <span class="combo-label" id="provinceLabel">ทุกจังหวัด (77)</span>
+              <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="combo-pop" id="provincePop" hidden>
+              <input type="text" id="provinceSearch" placeholder="พิมพ์ชื่อจังหวัด…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="provinceList" aria-autocomplete="list" aria-label="ค้นหาจังหวัด">
+              <ul class="combo-list" id="provinceList" role="listbox" aria-label="รายชื่อจังหวัด"></ul>
+            </div>
+          </div>
+          <span class="result-count">พบ <b id="resultCount">0</b> สถานี</span>
+          <button class="btn btn-outline btn-sm" id="printListBtn" type="button" title="พิมพ์บัญชีรายนามตามตัวกรอง (A4)">พิมพ์ A4</button>
+          <button class="btn btn-outline btn-sm" id="exportCsvBtn" type="button" title="ดาวน์โหลด CSV (เปิดใน Excel ได้)">CSV</button>
+          <button class="btn btn-outline btn-sm" id="clearFiltersBtn" type="button">ล้างตัวกรอง</button>
+        </div>
+      </div>
+      <div id="resultsList" class="results-scroll" aria-label="รายการสถานี"></div>
     </div>
 
-    <div class="toolbar">
-      <div class="result-count">พบ <b class="mono" id="resultCount">0</b> สถานี<span id="savedCountWrap" hidden> · <button class="toggle-saved" id="toggleSavedOnly" aria-pressed="false" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3h12v18l-6-4.5L6 21V3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>เฉพาะที่บันทึก (<span id="savedCount">0</span>)</button></span></div>
-      <div class="toolbar-right">
-        <button class="icon-btn" id="exportCsvBtn" type="button" title="ดาวน์โหลดผลลัพธ์เป็นไฟล์ CSV (เปิดใน Excel ได้)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          ดาวน์โหลด CSV
+    <div class="panel-glass viewport-panel">
+      <div class="hud-overlay" aria-hidden="true"><div class="hud-reticle"></div></div>
+      <div class="hud-top-bar">
+        <div id="activeRegionChip" class="hud-chip">สังกัด — · จังหวัด —</div>
+        <button type="button" id="dCopy" class="hud-action-btn" title="คัดลอกที่อยู่ไปวางในแม่แบบซอง/หนังสือ">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span id="copyAddrText">คัดลอกที่อยู่</span>
         </button>
-        <button class="btn btn-outline btn-sm" id="clearFiltersBtn" type="button">ล้างตัวกรอง</button>
+      </div>
+      <div id="stationTelemetry" class="station-telemetry">
+        <p style="color:var(--muted)">เลือกสถานีจากรายการเพื่อล็อกข้อมูล</p>
+      </div>
+      <div class="hud-bottom-bar">
+        <span id="activeStationChip" class="hud-chip">เลือกสถานีจากรายการเพื่อล็อกข้อมูล</span>
+        <details class="hud-source-details">
+          <summary class="hud-attribution">ฐานข้อมูล 1,484 สถานี · แหล่งที่มา</summary>
+          <div class="dossier-body" style="margin-top:10px; font-size:12px; color:var(--muted)">
+            <p>ข้อมูลยืนยันจากสำนักงานตำรวจแห่งชาติ ณ 16 พฤศจิกายน 2569 · 45 สถานีที่ต้นทางไม่กรอกที่อยู่จะแสดง “ไม่มีข้อมูล”</p>
+            <p>หากพบความคลาดเคลื่อน แจ้งได้ที่ <a href="mailto:akaradje07@gmail.com?subject=แจ้งที่อยู่ไม่ถูกต้อง — PS Locator" style="color:var(--brand)">akaradje07@gmail.com</a></p>
+          </div>
+        </details>
       </div>
     </div>
-
-    <div class="active-filters" id="activeFilters"></div>
-    <p class="sr-only" role="status" id="srStatus"></p>
-    <div class="results" id="resultsList"></div>
-    <div class="pager" id="pager" role="navigation" aria-label="เปลี่ยนหน้า"></div>
-  </div>
+  </section>
 </main>
 
-<!-- ════════ HOW TO ════════ -->
-<section class="howto" id="howto" aria-label="วิธีใช้งาน">
-  <div class="wrap-x">
-    <svg width="52" height="52" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="none" stroke="#C9A227" stroke-width="2"/><path d="M32 12l3.1 6.3 6.9 1-5 4.9 1.2 6.9L32 30.2 25.8 33.5l1.2-6.9-5-4.9 6.9-1L32 12Z" fill="#C9A227"/></svg>
-    <ol>
-      <li><span><b>1. ค้นหา</b>พิมพ์ชื่อสถานี แขวง/ตำบล ถนน หรือจังหวัด — ระบบรองรับภาษาไทยไม่ต้องพึ่งคำเต็ม</span></li>
-      <li><span><b>2. กรองภาค/จังหวัด</b>เลือกกองบัญชาการ (บช.น. หรือ ภ.1–ภ.9) หรือจังหวัด เพื่อจำกัดขอบเขตงาน</span></li>
-      <li><span><b>3. ใช้งานทันที</b>กดโทร / นำทาง Google Maps / พิมพ์แนบเอกสารคดี / บันทึกสถานีที่ใช้บ่อย</span></li>
-    </ol>
-  </div>
-</section>
-
-<!-- ════════ FOOTER ════════ -->
-<footer class="footer" aria-label="ส่วนท้ายเว็บไซต์">
-  <div class="wrap-x">
-    <div class="cols">
-      <div>
-        <div class="brand-line">
-          <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#7E1F1A"/><path d="M32 12l3.1 6.3 6.9 1-5 4.9 1.2 6.9L32 30.2 25.8 33.5l1.2-6.9-5-4.9 6.9-1L32 12Z" fill="#C9A227"/></svg>
-          PS Locator
-        </div>
-        <p style="margin:0; line-height:1.7">สารบบที่อยู่สถานีตำรวจ (สน./สภ.) ทั่วประเทศไทย สำหรับพนักงานสอบสวน เจ้าหน้าที่ตำรวจ และหน่วยงานที่ต้องติดต่อสถานีตำรวจทั่วราชอาณาจักร</p>
-      </div>
-      <nav aria-label="แหล่งข้อมูลอ้างอิง">
-        <h4>แหล่งข้อมูลอ้างอิง</h4>
-        <ul>
-          <li><a href="https://www.royalthaipolice.go.th/th/police-stations" target="_blank" rel="noopener">สำนักงานตำรวจแห่งชาติ — ข้อมูลสถานีตำรวจ</a></li>
-          <li><a href="data/stations.json" download="ps-locator-stations.json">ดาวน์โหลดชุดข้อมูลดิบ (JSON)</a></li>
-          <li><a href="https://ratchakitcha.soc.go.th/documents/17187.pdf" target="_blank" rel="noopener">ประกาศ ตร. 22 มีนาคม 2567 · เขตอำนาจ (427 หน้า)</a></li>
-          <li><a href="https://ratchakitcha.soc.go.th/documents/91341.pdf" target="_blank" rel="noopener">ประกาศ ตร. ฉบับที่ 2 · 22 ตุลาคม 2568 (13 หน้า)</a></li>
-          <li><a href="jurisdiction.html">ค้นหาเขตอำนาจจากชื่อตำบล · ย่อประกาศ</a></li>
-          <li><a href="https://github.com/akaradje/ps-locator" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.5 4.8 18.5 5.1 18.5 5.1c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/></svg>
-            ดูโค้ดบน GitHub
-          </a></li>
-          <li><a href="https://www.royalthaipolice.go.th" target="_blank" rel="noopener">royalthaipolice.go.th</a></li>
-          <li><a href="tel:1599">สายด่วนแจ้งเบาะแส ตร. <span class="mono">1599</span></a></li>
-          <li><a href="tel:191">เหตุด่วนเหตุร้าย <span class="mono">191</span></a></li>
-        </ul>
-      </nav>
-      <nav aria-label="ทางลัดและการแจ้งแก้ไข">
-        <h4>แจ้งข้อมูลคลาดเคลื่อน</h4>
-        <ul>
-          <li>พบข้อมูลคลาดเคลื่อน? แจ้งที่ <a href="mailto:akaradje07@gmail.com?subject=%E0%B9%81%E0%B8%88%E0%B9%89%E0%B8%82%E0%B9%89%E0%B8%AD%E0%B8%A1%E0%B8%B9%E0%B8%A5%E0%B8%84%E0%B8%A5%E0%B8%B2%E0%B8%94%E0%B8%9A%E0%B9%80%E0%B8%84%E0%B8%A5%E0%B8%B5%E0%B8%A2%E0%B8%87%20%E2%80%94%20PS%20Locator&amp;body=%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%AA%E0%B8%96%E0%B8%B2%E0%B8%99%E0%B8%B5%3A%0A%E0%B8%88%E0%B8%B1%E0%B8%87%E0%B8%AB%E0%B8%A7%E0%B8%B1%E0%B8%94%3A%0A%E0%B8%82%E0%B9%89%E0%B8%AD%E0%B8%A1%E0%B8%B9%E0%B8%A5%E0%B8%97%E0%B8%B5%E0%B9%88%E0%B8%84%E0%B8%A5%E0%B8%B2%E0%B8%94%E0%B9%80%E0%B8%84%E0%B8%A5%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%99%20(%E0%B8%97%E0%B8%B5%E0%B9%88%E0%B8%AD%E0%B8%A2%E0%B8%B9%E0%B9%88%2F%E0%B9%82%E0%B8%97%E0%B8%A3%E0%B8%A8%E0%B8%B1%E0%B8%9E%E0%B8%97%E0%B9%8C%2F%E0%B9%80%E0%B8%A7%E0%B9%87%E0%B8%9A%E0%B9%84%E0%B8%8B%E0%B8%95%E0%B9%8C)%3A%0A%E0%B8%82%E0%B9%89%E0%B8%AD%E0%B8%A1%E0%B8%B9%E0%B8%A5%E0%B8%97%E0%B8%B5%E0%B9%88%E0%B8%96%E0%B8%B9%E0%B8%81%E0%B8%95%E0%B9%89%E0%B8%AD%E0%B8%87%20(%E0%B8%96%E0%B9%89%E0%B8%B2%E0%B8%A1%E0%B8%B5)%3A%0A%E0%B9%81%E0%B8%AB%E0%B8%A5%E0%B9%88%E0%B8%87%E0%B8%AD%E0%B9%89%E0%B8%B2%E0%B8%87%E0%B8%AD%E0%B8%B4%E0%B8%87%3A%0A%E0%B8%9C%E0%B8%B9%E0%B9%89%E0%B9%81%E0%B8%88%E0%B9%89%E0%B8%87%20(%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD-%E0%B8%99%E0%B8%B2%E0%B8%A1%E0%B8%AA%E0%B8%81%E0%B8%B8%E0%B8%A5%2F%E0%B8%AB%E0%B8%99%E0%B8%88%E0%B8%A7%E0%B8%A2%E0%B8%87%E0%B8%B2%E0%B8%99)%3A">akaradje07@gmail.com</a></li>
-          <li><a href="#howto">วิธีการใช้งาน</a></li>
-          <li><a href="#results">กลับไปค้นหา</a></li>
-        </ul>
-      </nav>
-    </div>
-    <div class="footer-bottom">
-      <span>© พ.ศ. 2569 PS Locator — พัฒนาโดย ผู้ช่วยพนักงานสอบสวน สภ.เมืองชุมพร</span>
-      <span>ข้อมูล ณ 16 พ.ย. 2569 · โปรดตรวจสอบกับสถานีก่อนดำเนินการทางกฎหมาย</span>
-    </div>
-  </div>
-</footer>
-
-<!-- ════════ STATION DETAIL MODAL ════════ -->
-<div class="modal-overlay" id="stationModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true" inert>
-  <div class="modal" role="document">
-    <div class="modal-head">
-      <svg width="40" height="40" viewBox="0 0 64 64" aria-hidden="true" style="flex:none"><circle cx="32" cy="32" r="30" fill="none" stroke="#C9A227" stroke-width="2.4"/><path d="M32 12l3.1 6.3 6.9 1-5 4.9 1.2 6.9L32 30.2 25.8 33.5l1.2-6.9-5-4.9 6.9-1L32 12Z" fill="#C9A227"/></svg>
-      <div style="min-width:0">
-        <span class="sub" id="modalRegion">—</span>
-        <h2 id="modalTitle">—</h2>
-      </div>
-      <button class="modal-close" id="modalClose" aria-label="ปิดหน้าต่างรายละเอียด">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="detail-grid">
-        <div class="detail-cell full"><label>ที่อยู่สถานี</label><div class="v" id="dAddress">—</div></div>
-        <div class="detail-cell"><label>โทรศัพท์</label><a class="v mono" id="dPhone" href="tel:">—</a></div>
-        <div class="detail-cell"><label>โทรสาร (แฟกซ์)</label><div class="v mono" id="dFax">—</div></div>
-        <div class="detail-cell"><label>จังหวัด</label><div class="v" id="dProvince">—</div></div>
-        <div class="detail-cell"><label>กองบัญชาการ</label><div class="v" id="dRegion">—</div></div>
-        <div class="detail-cell full"><label>เว็บไซต์ทางการ</label><a class="v" id="dWebsite" href="#" target="_blank" rel="noopener">—</a></div>
-      </div>
-      <div class="copy-preview">
-        <div class="copy-preview-head"><b>ข้อความที่จะคัดลอก</b><small>ข้อความล้วน · ไม่มีลิงก์ ที่มา หรือเบอร์โทร · ข้อมูล ณ 16 พฤศจิกายน 2569</small></div>
-        <pre class="copy-pre" id="dCopyPreview">—</pre>
-      </div>
-      <div class="map-frame"><iframe id="dMap" title="แผนที่สถานีตำรวจ" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="about:blank"></iframe></div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-primary" id="dCopy" type="button">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M4 16V5a2 2 0 0 1 2-2h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-        คัดลอกที่อยู่
-      </button>
-      <a class="btn btn-ghost" id="dReport" href="mailto:akaradje07@gmail.com" target="_blank" rel="noopener">แจ้งที่อยู่ไม่ถูกต้อง</a>
-      <a class="btn btn-outline" id="dNavigate" href="#" target="_blank" rel="noopener">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2 4 22l8-4 8 4-8-20Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
-        นำทางใน Google Maps
-      </a>
-      <button class="btn btn-outline" id="dPrint" type="button">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-        พิมพ์รายละเอียด
-      </button>
-      <button class="btn btn-ghost" id="dSave" type="button" aria-pressed="false">บันทึกสถานีนี้</button>
-      <button class="btn btn-ghost" id="dJurisdiction" type="button">ดูเขตอำนาจของสถานีนี้</button>
-    </div>
-  </div>
-</div>
-
-<!-- ════════ BACK TO TOP ════════ -->
-<button class="to-top" id="toTop" type="button" aria-label="กลับขึ้นด้านบน" hidden>
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-</button>
-
-<!-- ════════ TOAST ════════ -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<!-- ════════ PRINT AREA (hidden on screen) ════════ -->
 <div id="print-area" aria-hidden="true"></div>
 
 <script src="data/stations.js"></script>
