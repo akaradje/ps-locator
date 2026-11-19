@@ -1072,7 +1072,7 @@ function selectStation(st) {
       <div class="copy-preview">
         <div class="copy-preview-head">
           <b>ข้อความที่จะคัดลอก (วางลงซอง/หนังสือ)</b>
-          <a href="${esc(reportURL(st))}">แจ้งที่อยู่คลาดเคลื่อน</a>
+          <a href="${esc(reportURL(st))}" data-report-id="${st.id}">แจ้งที่อยู่คลาดเคลื่อน</a>
         </div>
         <pre class="copy-pre">${esc(addrOk ? envelopeCopyText(st) : 'ต้นทางยังไม่มีที่อยู่สำหรับสถานีนี้ — กรุณาแจ้งที่อยู่')}</pre>
       </div>
@@ -1087,6 +1087,12 @@ function selectStation(st) {
     $('#openModalBtn', box)?.addEventListener('click', () => openStationModal(st.id));
     $('#printOneBtn', box)?.addEventListener('click', () => printStation(st));
     $('#saveStationBtn', box)?.addEventListener('click', () => toggleSave(st.id));
+    $('[data-report-id]', box)?.addEventListener('click', (e) => {
+      if ($('#reportModal')) {
+        e.preventDefault();
+        openReportModal(st.id);
+      }
+    });
   }
 
   const hudCopy = $('#hudCopyBtn');
@@ -1260,7 +1266,7 @@ function applyJurURL() {
   try {
     const p = new URLSearchParams(window.location.search);
     if (p.get('j')) jurParams.q = p.get('j');
-    if (['jur', 'digest'].includes(p.get('jtab'))) jurParams.tab = p.get('jtab');
+    if (['jur', 'digest', 'ai'].includes(p.get('jtab'))) jurParams.tab = p.get('jtab');
   } catch { /* ignore */ }
 }
 
@@ -1309,7 +1315,11 @@ function openStationModal(id) {
   copyBtn.disabled = !addr;
   copyBtn.setAttribute('aria-describedby', 'dCopyPreview');
   $('#dCopyPreview').textContent = addr ? envelopeCopyText(st) : 'ต้นทางยังไม่มีที่อยู่สำหรับสถานีนี้ — กรุณาแจ้งที่อยู่';
-  $('#dReport').href = reportURL(st);
+  const dReport = $('#dReport');
+  if (dReport) {
+    dReport.href = reportURL(st);
+    dReport.dataset.id = st.id;
+  }
 
   activeModalId = st.id;
   if (!$('#jurForm')) syncURL();
@@ -1428,6 +1438,7 @@ const JUR_ADDR = new Map();
 const JUR_TABS = [
   { id: 'jur', tab: 'tabJur', panel: 'panelJur' },
   { id: 'digest', tab: 'tabDigest', panel: 'panelDigest' },
+  { id: 'ai', tab: 'tabAi', panel: 'panelAi' },
 ];
 
 function normJur(s) {
@@ -2006,12 +2017,413 @@ function bindJurisdictionEvents() {
   $('#digestQ')?.addEventListener('input', (e) => { jurState.digestQ = e.target.value.trim(); renderDigest(); });
   $('#digestQ')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fullTextSearch(); } });
   $('#fullSearchBtn')?.addEventListener('click', fullTextSearch);
+
+  bindAiAssistantEvents();
+}
+
+/* ============================================================
+   ผู้ช่วย AI ราชกิจจานุเบกษา (Edge AI Strict Legal RAG + Local Fallback)
+   ============================================================ */
+const AI_LEGAL_DISCLAIMER =
+  'คำเตือนทางกฎหมาย: คำตอบนี้สรุปจากข้อความประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษาเท่านั้น ' +
+  'อาจมีตำบลบางส่วน/เฉพาะหมู่ที่/แนวเขต หรือ 4 สถานีที่ถอดข้อความไม่ครบ โปรดเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมาย';
+
+let aiBusy = false;
+
+function syncAiClear() {
+  const qEl = $('#aiQ'), btn = $('#clearAiBtn'), cap = $('#aiCapsule');
+  if (!qEl) return;
+  const hasVal = qEl.value.length > 0;
+  if (btn) btn.hidden = !hasVal;
+  if (cap) cap.classList.toggle('has-value', hasVal);
+}
+
+function extractLocalAiTerms(rawQuery) {
+  const cleaned = String(rawQuery || '')
+    .normalize('NFC')
+    .replace(/เหตุเกิดที่|เกิดเหตุที่|แจ้งความที่|แจ้ง\s*สภ\.?\s*ไหน|สภ\.?\s*ไหน|สน\.?\s*ไหน|โรงพักไหน|เขตอำนาจ|มีข้อยกเว้นหรือไม่|มีข้อยกเว้นไหม|รับผิดชอบบ้าง|รับผิดชอบ|เปลี่ยนแปลงอะไรบ้าง|อยู่ในเขต|พื้นที่|ช่วยตรวจสอบ|ตรวจสอบ/gu, ' ')
+    .replace(/[?？!！,،]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const candidates = [];
+  const push = (t) => {
+    const v = String(t || '').trim();
+    if (v.length >= 2 && !candidates.includes(v)) candidates.push(v);
+  };
+
+  /* ดึงชื่อหลัง ต./ตำบล/แขวง/อ./อำเภอ/สภ./สน. ก่อน */
+  const adminRe = /(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|สภ\.|สน\.)\s*([ก-๙a-zA-Z0-9.\-]+)/gu;
+  let m;
+  while ((m = adminRe.exec(rawQuery)) !== null) {
+    push(m[1]);
+  }
+  if (cleaned) {
+    push(cleaned);
+    for (const part of cleaned.split(/\s+/)) {
+      push(stripAdminPrefix(part));
+    }
+    for (const w of segmentWords(cleaned)) {
+      if (w.length >= 3) push(w);
+    }
+  }
+  return candidates;
+}
+
+function renderAiCitationsHTML(citations) {
+  if (!Array.isArray(citations) || !citations.length) return '';
+  return `<div class="ai-sec">
+    <div class="jur-sec-title">อ้างอิงราชกิจจานุเบกษา (ตรวจสอบเลขหน้าแล้ว)</div>
+    <div class="ai-citations">
+      ${citations.map(c => {
+        const pageNum = Number(c.page_number) || 1;
+        const href = `${c.pdf_url}#page=${pageNum}`;
+        return `<a class="btn btn-outline btn-sm ai-cite-btn" href="${esc(href)}" target="_blank" rel="noopener">เปิด PDF ราชกิจจานุเบกษา หน้า ${pageNum} <small>(${esc(c.label || c.doc_code || 'ประกาศ ตร.')})</small></a>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAiStationCardsHTML(stationsList) {
+  if (!Array.isArray(stationsList) || !stationsList.length) return '';
+  return `<div class="ai-sec">
+    <div class="jur-sec-title">สถานีตำรวจที่เกี่ยวข้อง (ยืนยันจากฐานข้อมูล 1,484 แห่ง)</div>
+    <div class="ai-station-list">
+      ${stationsList.map(item => {
+        const st = ST_BY_ID.get(Number(item.id)) || item;
+        if (!st || !st.name) return '';
+        const phoneHtml = jurPhoneLink(st);
+        const regLabel = REGION_SHORT[st.region] || (st.region ? String(st.region) : '-');
+        return `<article class="ai-station-card">
+          <div class="ai-station-top">
+            <div>
+              <strong>${esc(st.name)}</strong>
+              <div class="jur-meta"><span>จังหวัด${esc(st.province_th || '-')}</span><span>${esc(regLabel)}</span>${phoneHtml}</div>
+            </div>
+          </div>
+          <p class="ai-station-addr">${esc(st.address || 'ไม่มีข้อมูลที่อยู่')}</p>
+          ${item.note ? `<p class="ai-station-note">${esc(item.note)}</p>` : ''}
+          <div class="jur-actions">
+            <button class="btn btn-primary btn-sm" type="button" data-ai-detail="${st.id}">ดูรายละเอียดสถานี</button>
+            ${hasAddress(st)
+              ? `<button class="btn btn-outline btn-sm" type="button" data-ai-copy="${st.id}">คัดลอกที่อยู่</button>`
+              : ''}
+            <a class="btn btn-outline btn-sm" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">นำทางไปโรงพัก</a>
+          </div>
+        </article>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAiAnswer(data) {
+  const box = $('#aiResults');
+  if (!box) return;
+  const exceptionsHtml = Array.isArray(data.boundary_exceptions) && data.boundary_exceptions.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">ข้อยกเว้น / แนวเขตที่ควรตรวจสอบเพิ่มเติม</div>
+        <ul class="ai-list">${data.boundary_exceptions.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      </div>`
+    : '';
+
+  const neighborsHtml = Array.isArray(data.neighbors) && data.neighbors.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">สถานีข้างเคียงสำหรับประสานงาน</div>
+        <div class="ai-chips">${data.neighbors.map(n => `<button type="button" class="chip" data-ai-jump="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+      </div>`
+    : '';
+
+  box.innerHTML = `<article class="jur-card ai-answer-card">
+    <div class="ai-mode-badge is-edge">ตอบโดยผู้ช่วย AI ราชกิจจานุเบกษา · ผ่านการยืนยันรหัสสถานีและเลขหน้าแล้ว</div>
+    <p class="ai-summary">${esc(data.summary || '')}</p>
+    ${renderAiStationCardsHTML(data.stations)}
+    ${exceptionsHtml}
+    ${neighborsHtml}
+    ${renderAiCitationsHTML(data.citations)}
+    <p class="jur-warn ai-disclaimer">${esc(data.legal_disclaimer || AI_LEGAL_DISCLAIMER)}</p>
+  </article>`;
+}
+
+async function runLocalAiFallback(rawQuery, reasonMsg) {
+  const box = $('#aiResults');
+  if (!box) return;
+  const bannerMsg = reasonMsg || 'กำลังใช้โหมดค้นหาความเร็วสูงในเครื่อง (ออฟไลน์/สำรองอัตโนมัติ)';
+
+  let jurData = jurState.data;
+  if (!jurData) {
+    try { jurData = await loadJurisdiction(); } catch { jurData = null; }
+  }
+
+  const terms = extractLocalAiTerms(rawQuery);
+  let matchedHits = [];
+  let matchedAddr = [];
+  let matchedTerm = rawQuery;
+
+  if (jurData) {
+    for (const term of terms) {
+      const res = jurFindCandidates(term);
+      if (res.hits.length || res.addrHits.length) {
+        matchedHits = res.hits;
+        matchedAddr = res.addrHits;
+        matchedTerm = term;
+        break;
+      }
+    }
+  }
+
+  /* ค้นในย่อประกาศด้วย (สำหรับคำถามเชิงนโยบาย เช่น ฉบับที่ 2) */
+  const digestMatches = jurData && Array.isArray(jurData.summary)
+    ? jurData.summary.filter(c => {
+        const hay = normJur([c.title, c.text, c.keys].join(' '));
+        return terms.some(t => {
+          const nt = normJur(t);
+          return nt.length >= 2 && hay.includes(nt);
+        });
+      }).slice(0, 3)
+    : [];
+
+  const stationsFound = [];
+  const seenSt = new Set();
+  const citations = [];
+  const seenCite = new Set();
+  const warnings = [];
+  const doc2567Url = 'https://ratchakitcha.soc.go.th/documents/17187.pdf';
+
+  for (const h of matchedHits.slice(0, 6)) {
+    const rec = jurData.stations[h.idx];
+    const st = ST_BY_ID.get(rec.id);
+    if (!st || seenSt.has(st.id)) continue;
+    seenSt.add(st.id);
+    const missing = rec.count - rec.tambons.length;
+    const partialCount = rec.tambons.filter(t => t.partial).length;
+    const noteParts = [`อำเภอ${rec.amphoe} · บัญชีแนบท้าย หน้า ${rec.page}`];
+    if (partialCount > 0) {
+      noteParts.push(`มี ${partialCount} ตำบลระบุบางส่วน/เฉพาะหมู่ที่/แนวเขต`);
+      warnings.push(`${st.name} (หน้า ${rec.page}): มี ${partialCount} ตำบลที่ประกาศระบุ “บางส่วน/เฉพาะหมู่ที่/แนวเขต” ต้องตรวจสอบแนวเขตจริงใน PDF`);
+    }
+    if (missing > 0) {
+      noteParts.push(`ถอดชื่อได้ ${rec.tambons.length}/${rec.count} ตำบล`);
+      warnings.push(`${st.name} (หน้า ${rec.page}): ประกาศระบุ ${rec.count} ตำบล แต่ถอดข้อความได้ ${rec.tambons.length} ตำบล ต้องตรวจสอบประกาศฉบับจริง`);
+    }
+    stationsFound.push({ id: st.id, note: noteParts.join(' · ') });
+    if (rec.page && !seenCite.has('2567:' + rec.page)) {
+      seenCite.add('2567:' + rec.page);
+      citations.push({ doc_code: '2567', label: 'ประกาศ ตร. 22 มี.ค. 2567', page_number: rec.page, pdf_url: doc2567Url });
+    }
+  }
+
+  for (const ah of matchedAddr.slice(0, 3)) {
+    const st = ST_BY_ID.get(ah.id);
+    if (!st || seenSt.has(st.id)) continue;
+    seenSt.add(st.id);
+    stationsFound.push({ id: st.id, note: 'พบจากตำบล/แขวงที่ตั้งสถานีตามที่อยู่ (ไม่ใช่บัญชีเขตอำนาจตามประกาศ — โปรดยืนยันกับสถานี)' });
+  }
+
+  /* ถ้ายังไม่พบใน jurisdictions ให้ลองค้นชื่อสถานีจาก STATIONS โดยตรง */
+  if (!stationsFound.length && !digestMatches.length) {
+    for (const term of terms) {
+      const { items } = getSuggestions(term);
+      for (const it of items.slice(0, 4)) {
+        if (!seenSt.has(it.st.id)) {
+          seenSt.add(it.st.id);
+          stationsFound.push({ id: it.st.id, note: 'พบจากฐานข้อมูลสถานีตำรวจในเครื่อง' });
+        }
+      }
+      if (stationsFound.length) break;
+    }
+  }
+
+  for (const dItem of digestMatches) {
+    const src = (jurData.meta.sources || []).find(s => s.code === dItem.doc) || { label: 'ประกาศ ตร.', url: doc2567Url };
+    const ck = `${dItem.doc}:${dItem.page}`;
+    if (!seenCite.has(ck)) {
+      seenCite.add(ck);
+      citations.push({ doc_code: dItem.doc, label: src.label, page_number: dItem.page, pdf_url: src.url });
+    }
+  }
+
+  const digestHtml = digestMatches.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">สรุปสาระสำคัญจากประกาศที่เกี่ยวข้อง</div>
+        ${digestMatches.map(c => `<div class="ai-digest-hit"><b>${esc(c.title)}</b><p>${esc(c.text)}</p></div>`).join('')}
+      </div>`
+    : '';
+
+  const warnHtml = warnings.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">ข้อควรตรวจสอบแนวเขต / ข้อมูลถอดข้อความ</div>
+        <ul class="ai-list">${warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>
+      </div>`
+    : '';
+
+  if (!stationsFound.length && !digestMatches.length) {
+    box.innerHTML = `<article class="jur-card ai-answer-card">
+      <div class="ai-mode-badge is-fallback">${esc(bannerMsg)}</div>
+      <div class="jur-empty">
+        <h3>ไม่พบข้อมูลที่ตรงกับ “${esc(rawQuery)}” ในฐานข้อมูลเครื่อง</h3>
+        <p>ลองระบุชื่อตำบล แขวง อำเภอ จังหวัด หรือชื่อ สภ./สน. ให้ชัดเจนขึ้น หรือเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริง</p>
+        <a class="btn btn-outline btn-sm" href="${doc2567Url}" target="_blank" rel="noopener">เปิดประกาศ ตร. 2567 (PDF)</a>
+      </div>
+      <p class="jur-warn ai-disclaimer">${esc(AI_LEGAL_DISCLAIMER)}</p>
+    </article>`;
+    return;
+  }
+
+  const summaryText = stationsFound.length
+    ? `สลับมาใช้การค้นหาในเครื่องอัตโนมัติ: พบ ${stationsFound.length} สถานีที่เกี่ยวข้องกับ “${matchedTerm}”`
+    : `สลับมาใช้การค้นหาในเครื่องอัตโนมัติ: พบ ${digestMatches.length} หัวข้อสรุปประกาศที่เกี่ยวข้องกับคำถามของคุณ`;
+
+  box.innerHTML = `<article class="jur-card ai-answer-card">
+    <div class="ai-mode-badge is-fallback">${esc(bannerMsg)}</div>
+    <p class="ai-summary">${esc(summaryText)}</p>
+    ${renderAiStationCardsHTML(stationsFound)}
+    ${digestHtml}
+    ${warnHtml}
+    ${renderAiCitationsHTML(citations)}
+    <p class="jur-warn ai-disclaimer">${esc(AI_LEGAL_DISCLAIMER)}</p>
+  </article>`;
+}
+
+async function submitAiSearch(rawQuery) {
+  const q = String(rawQuery || '').trim();
+  if (q.length < 2) {
+    showToast('กรุณาพิมพ์คำถามอย่างน้อย 2 ตัวอักษร');
+    return;
+  }
+  if (aiBusy) return;
+  aiBusy = true;
+
+  const input = $('#aiQ');
+  if (input) input.value = q;
+  syncAiClear();
+
+  const submitBtn = $('#aiSubmitBtn');
+  if (submitBtn) submitBtn.disabled = true;
+
+  const box = $('#aiResults');
+  if (box) {
+    box.innerHTML = `<div class="jur-empty ai-loading"><h3>กำลังค้นหาและตรวจสอบกับราชกิจจานุเบกษา…</h3><p>ระบบกำลังยืนยันรหัสสถานีและเลขหน้าประกาศฉบับจริง</p></div>`;
+  }
+  emitCapsulePulse(0.85, 620);
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      await runLocalAiFallback(q, 'ขณะนี้อยู่ในโหมดออฟไลน์ ระบบสลับมาใช้การค้นหาในเครื่องให้อัตโนมัติ');
+      return;
+    }
+
+    const res = await fetch('/api/ai-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+    });
+
+    if (!res.ok) {
+      await runLocalAiFallback(q, 'ไม่สามารถเชื่อมต่อผู้ช่วย AI ได้ในขณะนี้ ระบบสลับมาใช้การค้นหาในเครื่องให้อัตโนมัติ');
+      return;
+    }
+
+    const data = await res.json();
+    if (data && data.ok) {
+      renderAiAnswer(data);
+    } else {
+      await runLocalAiFallback(q, (data && data.message) || 'ระบบสลับมาใช้การค้นหาความเร็วสูงในเครื่องให้อัตโนมัติ');
+    }
+  } catch {
+    await runLocalAiFallback(q, 'ไม่สามารถเชื่อมต่อเครือข่ายได้ ระบบสลับมาใช้การค้นหาในเครื่องให้อัตโนมัติ');
+  } finally {
+    aiBusy = false;
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+function bindAiAssistantEvents() {
+  const form = $('#aiForm');
+  const input = $('#aiQ');
+  if (!form || !input) return;
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitAiSearch(input.value);
+  });
+
+  input.addEventListener('input', syncAiClear);
+
+  $('#clearAiBtn')?.addEventListener('click', () => {
+    input.value = '';
+    syncAiClear();
+    input.focus();
+  });
+
+  $('.ai-hints')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-aiq]');
+    if (chip) {
+      input.value = chip.dataset.aiq;
+      syncAiClear();
+      submitAiSearch(chip.dataset.aiq);
+    }
+  });
+
+  $('#aiResults')?.addEventListener('click', (e) => {
+    const copy = e.target.closest('[data-ai-copy]');
+    if (copy) {
+      const st = ST_BY_ID.get(+copy.dataset.aiCopy);
+      if (st) copyStation(st, copy);
+      return;
+    }
+    const detail = e.target.closest('[data-ai-detail]');
+    if (detail) {
+      openStationModal(+detail.dataset.aiDetail);
+      return;
+    }
+    const jump = e.target.closest('[data-ai-jump]');
+    if (jump) {
+      setJurTab('jur');
+      jurSearch(jump.dataset.aiJump);
+    }
+  });
+
+  /* Web Speech API (th-TH) สำหรับผู้ช่วย AI */
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const voiceBtn = $('#aiVoiceBtn');
+  if (SpeechRec && voiceBtn) {
+    voiceBtn.style.display = 'inline-flex';
+    const rec = new SpeechRec();
+    rec.lang = 'th-TH';
+    rec.interimResults = false;
+    let listening = false;
+    voiceBtn.addEventListener('click', () => {
+      if (listening) { rec.stop(); return; }
+      try {
+        rec.start();
+        listening = true;
+        voiceBtn.classList.add('is-active');
+        emitCapsulePulse(0.9, 480);
+      } catch {
+        listening = false;
+        voiceBtn.classList.remove('is-active');
+      }
+    });
+    rec.addEventListener('result', (ev) => {
+      const t = ev.results[0]?.[0]?.transcript || '';
+      if (t) {
+        input.value = t;
+        syncAiClear();
+        submitAiSearch(t);
+      }
+    });
+    rec.addEventListener('end', () => {
+      listening = false;
+      voiceBtn.classList.remove('is-active');
+    });
+  }
 }
 
 function initJurisdiction() {
   buildAddressIndex();
   bindJurisdictionEvents();
   if (jurParams.tab === 'digest') setJurTab('digest');
+  else if (jurParams.tab === 'ai') setJurTab('ai');
   else setJurTab('jur');
   if (jurParams.q || jurParams.tab !== 'jur') {
     loadJurisdiction().then(afterJurisdictionLoaded).catch(jurisLoadFailed);
@@ -2203,6 +2615,206 @@ function bindStationEvents() {
   }
 }
 
+/* ---------- Crowdsourced Data Verification Modal (#reportModal) ---------- */
+const REPORT_FIELD_LABELS = {
+  address: 'ที่อยู่สถานี',
+  phone: 'หมายเลขโทรศัพท์',
+  fax: 'หมายเลขโทรสาร (แฟกซ์)',
+  website: 'เว็บไซต์ทางการ',
+  other: 'ข้อมูลอื่นๆ',
+};
+
+let reportLastFocus = null;
+let reportStation = null;
+let reportSubmitting = false;
+
+function getReportCurrentValue(st, fieldType) {
+  if (!st) return 'ไม่มีข้อมูล';
+  if (fieldType === 'phone') return formatPhoneDisplay(st.phone) || 'ไม่มีข้อมูล';
+  if (fieldType === 'fax') return formatPhoneDisplay(st.fax) || 'ไม่มีข้อมูล';
+  if (fieldType === 'address') return st.address || 'ไม่มีข้อมูล';
+  if (fieldType === 'website') return st.website || 'ไม่มีข้อมูล';
+  return 'ระบุรายละเอียดในช่องข้อมูลที่ถูกต้อง';
+}
+
+function buildReportMailto(st, fieldType, suggestedVal, sourceRef, reporter) {
+  const label = REPORT_FIELD_LABELS[fieldType] || fieldType;
+  const currentVal = getReportCurrentValue(st, fieldType);
+  const subject = `แจ้งข้อมูลคลาดเคลื่อน (${label}) — ${st.name}`;
+  const body = [
+    `สถานี: ${st.name} (ID: ${st.id})`,
+    `จังหวัด: ${st.province_th}`,
+    `ประเภทข้อมูล: ${label}`,
+    `ข้อมูลปัจจุบันในระบบ: ${currentVal}`,
+    `ข้อมูลที่ถูกต้อง: ${suggestedVal || ''}`,
+    sourceRef ? `แหล่งอ้างอิง: ${sourceRef}` : '',
+    reporter ? `ผู้แจ้ง: ${reporter}` : '',
+  ].filter(Boolean).join('\n');
+  return `mailto:akaradje07@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function syncReportCurrentAndMailto() {
+  if (!reportStation) return;
+  const fieldType = $('#reportFieldType')?.value || 'address';
+  const curEl = $('#reportCurrentValue');
+  if (curEl) curEl.textContent = getReportCurrentValue(reportStation, fieldType);
+  const mailtoBtn = $('#reportMailtoFallback');
+  if (mailtoBtn) {
+    mailtoBtn.href = buildReportMailto(
+      reportStation,
+      fieldType,
+      $('#reportSuggested')?.value.trim() || '',
+      $('#reportSource')?.value.trim() || '',
+      $('#reportReporter')?.value.trim() || ''
+    );
+  }
+}
+
+function showReportFeedback(kind, message, mailtoHref) {
+  const box = $('#reportFeedback');
+  if (!box) return;
+  box.hidden = false;
+  box.className = `report-feedback is-${kind}`;
+  box.innerHTML = esc(message) + (mailtoHref
+    ? ` <a class="report-mailto-inline" href="${esc(mailtoHref)}">เปิดแอปอีเมลพร้อมข้อความที่กรอกไว้ →</a>`
+    : '');
+}
+
+function openReportModal(stationId) {
+  const repModal = $('#reportModal');
+  const st = ST_BY_ID.get(Number(stationId));
+  if (!repModal || !st) return;
+
+  reportStation = st;
+  reportLastFocus = document.activeElement;
+
+  const idInput = $('#reportStationId');
+  if (idInput) idInput.value = String(st.id);
+  const meta = $('#reportStationMeta');
+  if (meta) meta.textContent = `${st.name} · จังหวัด${st.province_th}`;
+  const title = $('#reportModalTitle');
+  if (title) title.textContent = 'แจ้งข้อมูลคลาดเคลื่อน';
+
+  const fieldSel = $('#reportFieldType');
+  if (fieldSel) fieldSel.value = 'address';
+  const sug = $('#reportSuggested');
+  if (sug) sug.value = '';
+  const src = $('#reportSource');
+  if (src) src.value = '';
+  const rep = $('#reportReporter');
+  if (rep) rep.value = '';
+  const hp = $('#reportHp');
+  if (hp) hp.value = '';
+  const fb = $('#reportFeedback');
+  if (fb) { fb.hidden = true; fb.textContent = ''; }
+  const submitBtn = $('#reportSubmitBtn');
+  if (submitBtn) submitBtn.disabled = false;
+
+  syncReportCurrentAndMailto();
+
+  repModal.classList.add('open');
+  repModal.setAttribute('aria-hidden', 'false');
+  repModal.removeAttribute('inert');
+  document.body.style.overflow = 'hidden';
+  (sug || fieldSel || $('#reportModalClose'))?.focus();
+}
+
+function closeReportModal() {
+  const repModal = $('#reportModal');
+  if (!repModal || !repModal.classList.contains('open')) return;
+  repModal.classList.remove('open');
+  repModal.setAttribute('aria-hidden', 'true');
+  repModal.setAttribute('inert', '');
+  if (!modal || !modal.classList.contains('open')) {
+    document.body.style.overflow = '';
+  }
+  if (reportLastFocus && reportLastFocus.focus) reportLastFocus.focus();
+}
+
+function bindReportModalEvents() {
+  const repModal = $('#reportModal');
+  const form = $('#reportForm');
+  if (!repModal || !form) return;
+
+  $('#reportModalClose')?.addEventListener('click', closeReportModal);
+  $('#reportCancelBtn')?.addEventListener('click', closeReportModal);
+  repModal.addEventListener('click', (e) => { if (e.target === repModal) closeReportModal(); });
+
+  repModal.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusables = $$('a[href], button:not([disabled]), input:not([tabindex="-1"]):not([type="hidden"]), select, textarea', repModal)
+      .filter(el => el.getClientRects().length);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  $('#reportFieldType')?.addEventListener('change', syncReportCurrentAndMailto);
+  $('#reportSuggested')?.addEventListener('input', syncReportCurrentAndMailto);
+  $('#reportSource')?.addEventListener('input', syncReportCurrentAndMailto);
+  $('#reportReporter')?.addEventListener('input', syncReportCurrentAndMailto);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (reportSubmitting || !reportStation) return;
+
+    const fieldType = $('#reportFieldType')?.value || 'address';
+    const suggestedVal = ($('#reportSuggested')?.value || '').trim();
+    const sourceRef = ($('#reportSource')?.value || '').trim();
+    const reporter = ($('#reportReporter')?.value || '').trim();
+    const websiteHp = ($('#reportHp')?.value || '').trim();
+
+    if (suggestedVal.length < 2) {
+      showReportFeedback('error', 'กรุณากรอกข้อมูลที่ถูกต้องอย่างน้อย 2 ตัวอักษร');
+      $('#reportSuggested')?.focus();
+      return;
+    }
+
+    const mailtoHref = buildReportMailto(reportStation, fieldType, suggestedVal, sourceRef, reporter);
+    syncReportCurrentAndMailto();
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showReportFeedback('warn', 'ขณะนี้อยู่ในโหมดออฟไลน์ กรุณาส่งคำแจ้งผ่านอีเมลแทน', mailtoHref);
+      return;
+    }
+
+    reportSubmitting = true;
+    const submitBtn = $('#reportSubmitBtn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          station_id: String(reportStation.id),
+          field_type: fieldType,
+          suggested_value: suggestedVal,
+          source_ref: sourceRef,
+          reporter,
+          website_hp: websiteHp,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        showReportFeedback('ok', data.message || 'ขอบคุณครับ ข้อมูลของคุณเข้าสู่คิวตรวจสอบของผู้ดูแลแล้ว');
+        showToast('ส่งคำแจ้งตรวจสอบเรียบร้อยแล้ว');
+        if ($('#reportSuggested')) $('#reportSuggested').value = '';
+      } else if (data && data.fallback === 'mailto') {
+        showReportFeedback('warn', data.message || 'ระบบรับแจ้งออนไลน์ยังไม่พร้อมใช้งาน กรุณาส่งผ่านอีเมลแทน', mailtoHref);
+      } else {
+        showReportFeedback('error', (data && data.message) || 'ไม่สามารถส่งคำแจ้งได้ในขณะนี้ กรุณาส่งผ่านอีเมลแทน', mailtoHref);
+      }
+    } catch {
+      showReportFeedback('warn', 'เชื่อมต่อระบบรับแจ้งไม่สำเร็จ กรุณาส่งผ่านอีเมลแทน', mailtoHref);
+    } finally {
+      reportSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+}
+
 /* ---------- Global Events (Theme, Modal, Keys, Back-to-top) ---------- */
 function bindGlobalEvents() {
   $('#themeToggle')?.addEventListener('click', () => {
@@ -2267,7 +2879,16 @@ function bindGlobalEvents() {
       if ($('#jurForm')) { setJurTab('jur'); jurSearch(jq); }
       else window.location.href = 'jurisdiction.html?j=' + encodeURIComponent(jq) + '&jtab=jur';
     });
+    $('#dReport')?.addEventListener('click', (e) => {
+      const id = +(e.currentTarget.dataset.id || $('#dSave')?.dataset.id || 0);
+      if (id && $('#reportModal')) {
+        e.preventDefault();
+        openReportModal(id);
+      }
+    });
   }
+
+  bindReportModalEvents();
 
   /* Global keyboard shortcuts */
   document.addEventListener('keydown', (e) => {
@@ -2276,7 +2897,11 @@ function bindGlobalEvents() {
       const target = $('#searchInput') || $('#jurQ');
       if (target) { target.focus(); target.select(); emitCapsulePulse(1, 640); }
     } else if (e.key === 'Escape') {
-      if (modal && modal.classList.contains('open')) {
+      const repModal = $('#reportModal');
+      if (repModal && repModal.classList.contains('open')) {
+        e.preventDefault();
+        closeReportModal();
+      } else if (modal && modal.classList.contains('open')) {
         e.preventDefault();
         closeStationModal();
       } else if ($('#searchInput')?.value && document.activeElement !== $('#searchInput') && !$('.manual-copy')) {

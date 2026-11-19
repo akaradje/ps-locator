@@ -13,5 +13,17 @@
       "database_name": "ps-locator-stats",
       "database_id": "2377b3b0-2ae1-43ae-b025-a4b42a8d1b29"
     }
-  ]
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "ps-locator-gazette"
+    }
+  ],
+  "vars": {
+    "AI_DAILY_LIMIT": "250"
+  }
 }
