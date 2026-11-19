@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'v2.1.1-og';
+const CACHE_VERSION = 'v2.1.2-voice';
 const SHELL_CACHE = 'ps-locator-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'ps-locator-data-' + CACHE_VERSION;
 

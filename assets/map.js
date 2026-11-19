@@ -2305,43 +2305,105 @@
   if (idleGpsBtn) idleGpsBtn.addEventListener('click', triggerGPS);
 
   /* =====================================================================
-     12. Voice Search Trigger (Web Speech API)
+     12. Voice Search Trigger (Web Speech API — Real-Time Thai)
   ===================================================================== */
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SpeechRec && voiceBtn) {
-    voiceBtn.style.display = 'inline-flex';
-    const recognition = new SpeechRec();
-    recognition.lang = 'th-TH';
-    recognition.interimResults = false;
-    let isListening = false;
+  if (voiceBtn && searchInput) {
+    if (!SpeechRec) {
+      voiceBtn.style.display = 'none';
+      voiceBtn.addEventListener('click', function () {
+        showStatus('เบราว์เซอร์นี้ไม่รองรับการค้นหาด้วยเสียง กรุณาเปิดใน Chrome หรือ Safari');
+      });
+    } else {
+      voiceBtn.style.display = 'inline-flex';
+      voiceBtn.setAttribute('aria-pressed', 'false');
+      let activeRec = null;
+      let isListening = false;
+      const origPlaceholder = searchInput.placeholder || '';
 
-    voiceBtn.addEventListener('click', function () {
-      if (isListening) { recognition.stop(); return; }
-      try {
-        recognition.start();
-        isListening = true;
-        voiceBtn.classList.add('is-active');
-        showStatus('กำลังฟังเสียงพูดเพื่อค้นหาสถานที่…');
-        emitCapsulePulse(0.9, 480);
-      } catch (_) {
-        isListening = false;
-        voiceBtn.classList.remove('is-active');
-      }
-    });
-    recognition.addEventListener('result', function (event) {
-      const transcript = event.results[0] && event.results[0][0] ? event.results[0][0].transcript : '';
-      if (transcript) { searchInput.value = transcript; syncInputState(); executeSearch(transcript); }
-    });
-    recognition.addEventListener('end', function () {
-      isListening = false;
-      voiceBtn.classList.remove('is-active');
-      if (inlineStatus.textContent.indexOf('กำลังฟัง') !== -1) showStatus('');
-    });
-    recognition.addEventListener('error', function () {
-      isListening = false;
-      voiceBtn.classList.remove('is-active');
-      showStatus('ไม่สามารถรับเสียงพูดได้ในขณะนี้ ลองพิมพ์คำค้นหาแทน');
-    });
+      voiceBtn.addEventListener('click', function () {
+        if (isListening && activeRec) {
+          try { activeRec.stop(); } catch (_) {}
+          return;
+        }
+
+        const rec = new SpeechRec();
+        activeRec = rec;
+        rec.lang = 'th-TH';
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.maxAlternatives = 1;
+
+        let latestText = '';
+        let finalized = false;
+
+        rec.onstart = function () {
+          isListening = true;
+          voiceBtn.classList.add('is-active');
+          voiceBtn.setAttribute('aria-pressed', 'true');
+          searchInput.placeholder = 'กำลังฟังเสียงพูด... พูดชื่อสถานที่ ตำบล หรือสถานีได้เลย';
+          showStatus('กำลังฟังเสียงพูดภาษาไทย... พูดชื่อสถานที่ ตำบล หรือสถานีได้เลย');
+          emitCapsulePulse(0.9, 480);
+        };
+
+        rec.onresult = function (ev) {
+          const raw = Array.from(ev.results || [])
+            .map(function (r) { return (r && r[0] && r[0].transcript) || ''; })
+            .join(' ')
+            .trim();
+          const clean = raw.replace(/[.。]+$/g, '').trim();
+          if (clean) {
+            latestText = clean;
+            searchInput.value = clean;
+            syncInputState();
+          }
+          const lastRes = ev.results && ev.results[ev.results.length - 1];
+          if (lastRes && lastRes.isFinal && latestText) {
+            finalized = true;
+            executeSearch(latestText);
+          }
+        };
+
+        rec.onerror = function (ev) {
+          const code = ev && ev.error;
+          if (code === 'not-allowed' || code === 'service-not-allowed') {
+            showStatus('ไม่ได้รับสิทธิ์ใช้ไมโครโฟน — กรุณากดไอคอนหน้าแถบ URL เพื่ออนุญาตไมโครโฟน');
+          } else if (code === 'audio-capture') {
+            showStatus('ไม่พบไมโครโฟนในอุปกรณ์ของคุณ');
+          } else if (code === 'no-speech') {
+            showStatus('ไม่ได้ยินเสียงพูด — ลองกดไมโครโฟนแล้วพูดใหม่อีกครั้ง');
+          } else if (code === 'network') {
+            showStatus('บริการรับเสียงของเบราว์เซอร์ขัดข้อง — กรุณาพิมพ์ค้นหาแทน');
+          } else if (code !== 'aborted') {
+            showStatus('ไม่สามารถรับเสียงพูดได้ในขณะนี้ ลองกดใหม่อีกครั้ง');
+          }
+        };
+
+        rec.onend = function () {
+          isListening = false;
+          activeRec = null;
+          voiceBtn.classList.remove('is-active');
+          voiceBtn.setAttribute('aria-pressed', 'false');
+          searchInput.placeholder = origPlaceholder;
+          if (inlineStatus.textContent.indexOf('กำลังฟัง') !== -1) showStatus('');
+          if (!finalized && latestText) {
+            finalized = true;
+            executeSearch(latestText);
+          }
+        };
+
+        try {
+          rec.start();
+        } catch (_) {
+          isListening = false;
+          activeRec = null;
+          voiceBtn.classList.remove('is-active');
+          voiceBtn.setAttribute('aria-pressed', 'false');
+          searchInput.placeholder = origPlaceholder;
+          showStatus('ไม่สามารถเริ่มรับเสียงพูดได้ ลองกดไมโครโฟนใหม่อีกครั้ง');
+        }
+      });
+    }
   }
 
   /* =====================================================================

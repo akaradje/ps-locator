@@ -675,15 +675,16 @@ body.is-scanning .scan-progress { opacity: 1; animation: scanSweep 1.15s cubic-b
 .capsule-action-btn:hover { color: var(--ink); background: var(--surface-hover); border-color: var(--border); }
 
 .capsule-action-btn.is-active {
-  color: var(--brand);
-  background: var(--glow-primary);
-  border-color: var(--brand-line);
+  color: #fff;
+  background: #e11d48;
+  border-color: #fb7185;
+  box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.28);
   animation: pulseRing 1.4s ease-in-out infinite;
 }
 
 @keyframes pulseRing {
-  0%, 100% { box-shadow: 0 0 0 0 var(--glow-primary); }
-  50% { box-shadow: 0 0 0 8px transparent; }
+  0%, 100% { box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.28); }
+  50% { box-shadow: 0 0 0 9px rgba(225, 29, 72, 0); }
 }
 
 .clear-btn { display: none; }

@@ -1661,10 +1661,10 @@ function jurSuggest(qRaw) {
   return out;
 }
 
-function renderJurSuggest() {
+function renderJurSuggest(rawOverride) {
   const panel = $('#jurSuggest'), input = $('#jurQ');
   if (!panel || !input) return;
-  const qRaw = input.value.trim();
+  const qRaw = String(rawOverride !== undefined && typeof rawOverride === 'string' ? rawOverride : input.value).trim();
   jurState.sug = qRaw ? jurSuggest(qRaw) : [];
   jurState.sugActive = -1;
   input.removeAttribute('aria-activedescendant');
@@ -2017,6 +2017,20 @@ function bindJurisdictionEvents() {
   $('#digestQ')?.addEventListener('input', (e) => { jurState.digestQ = e.target.value.trim(); renderDigest(); });
   $('#digestQ')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fullTextSearch(); } });
   $('#fullSearchBtn')?.addEventListener('click', fullTextSearch);
+
+  /* Web Speech API (th-TH) สำหรับค้นหาชื่อตำบล */
+  setupVoiceButton({
+    btn: $('#jurVoiceBtn'),
+    input: $('#jurQ'),
+    onInterim: (text) => {
+      if ($('#clearJurBtn')) $('#clearJurBtn').hidden = !text;
+      syncJurClear();
+      loadJurisdiction().then(() => renderJurSuggest(text)).catch(jurisLoadFailed);
+    },
+    onFinal: (text) => {
+      jurSearch(text);
+    },
+  });
 
   bindAiAssistantEvents();
 }
@@ -2384,39 +2398,17 @@ function bindAiAssistantEvents() {
   });
 
   /* Web Speech API (th-TH) สำหรับผู้ช่วย AI */
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const voiceBtn = $('#aiVoiceBtn');
-  if (SpeechRec && voiceBtn) {
-    voiceBtn.style.display = 'inline-flex';
-    const rec = new SpeechRec();
-    rec.lang = 'th-TH';
-    rec.interimResults = false;
-    let listening = false;
-    voiceBtn.addEventListener('click', () => {
-      if (listening) { rec.stop(); return; }
-      try {
-        rec.start();
-        listening = true;
-        voiceBtn.classList.add('is-active');
-        emitCapsulePulse(0.9, 480);
-      } catch {
-        listening = false;
-        voiceBtn.classList.remove('is-active');
-      }
-    });
-    rec.addEventListener('result', (ev) => {
-      const t = ev.results[0]?.[0]?.transcript || '';
-      if (t) {
-        input.value = t;
-        syncAiClear();
-        submitAiSearch(t);
-      }
-    });
-    rec.addEventListener('end', () => {
-      listening = false;
-      voiceBtn.classList.remove('is-active');
-    });
-  }
+  setupVoiceButton({
+    btn: $('#aiVoiceBtn'),
+    input,
+    onInterim: (text) => {
+      if ($('#clearAiBtn')) $('#clearAiBtn').hidden = !text;
+      syncAiClear();
+    },
+    onFinal: (text) => {
+      submitAiSearch(text);
+    },
+  });
 }
 
 function initJurisdiction() {
@@ -2589,30 +2581,120 @@ function bindStationEvents() {
   });
 
   /* Voice search (th-TH) */
+  setupVoiceButton({
+    btn: $('#voiceBtn'),
+    input,
+    onInterim: (text) => {
+      $('#searchHub')?.classList.toggle('has-value', !!text);
+      renderSuggest(text);
+    },
+    onFinal: (text) => {
+      emitCapsulePulse(1, 640);
+      applySearch(text);
+    },
+  });
+}
+
+/* ---------- Shared Real-Time Thai Voice Search Helper ---------- */
+function setupVoiceButton({ btn, input, onInterim, onFinal }) {
+  if (!btn || !input) return;
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const voiceBtn = $('#voiceBtn');
-  if (SpeechRec && voiceBtn && input) {
-    voiceBtn.style.display = 'inline-flex';
-    const rec = new SpeechRec();
-    rec.lang = 'th-TH';
-    rec.interimResults = false;
-    let listening = false;
-    voiceBtn.addEventListener('click', () => {
-      if (listening) { rec.stop(); return; }
-      try { rec.start(); listening = true; voiceBtn.classList.add('is-active'); emitCapsulePulse(0.9, 480); }
-      catch { listening = false; voiceBtn.classList.remove('is-active'); }
+  if (!SpeechRec) {
+    btn.style.display = 'none';
+    btn.addEventListener('click', () => {
+      showToast('เบราว์เซอร์นี้ไม่รองรับการค้นหาด้วยเสียง กรุณาเปิดใน Chrome หรือ Safari');
     });
-    rec.addEventListener('result', (ev) => {
-      const t = ev.results[0]?.[0]?.transcript || '';
-      if (t) {
-        input.value = t;
-        $('#searchHub')?.classList.add('has-value');
-        emitCapsulePulse(1, 640);
-        applySearch(t);
-      }
-    });
-    rec.addEventListener('end', () => { listening = false; voiceBtn.classList.remove('is-active'); });
+    return;
   }
+
+  btn.style.display = 'inline-flex';
+  btn.setAttribute('aria-pressed', 'false');
+
+  let activeRec = null;
+  let isListening = false;
+  const origPlaceholder = input.placeholder || '';
+
+  btn.addEventListener('click', () => {
+    if (isListening && activeRec) {
+      try { activeRec.stop(); } catch { /* ignore */ }
+      return;
+    }
+
+    const rec = new SpeechRec();
+    activeRec = rec;
+    rec.lang = 'th-TH';
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+
+    let latestText = '';
+    let finalized = false;
+
+    rec.onstart = () => {
+      isListening = true;
+      btn.classList.add('is-active');
+      btn.setAttribute('aria-pressed', 'true');
+      input.placeholder = 'กำลังฟังเสียงพูด... พูดชื่อสถานี จังหวัด หรือตำบลได้เลย';
+      showToast('กำลังฟังเสียงพูดภาษาไทย... พูดได้เลย');
+      emitCapsulePulse(0.9, 480);
+    };
+
+    rec.onresult = (ev) => {
+      const raw = Array.from(ev.results || [])
+        .map(r => (r && r[0] && r[0].transcript) || '')
+        .join(' ')
+        .trim();
+      const clean = raw.replace(/[.。]+$/g, '').trim();
+      if (clean) {
+        latestText = clean;
+        input.value = clean;
+        if (typeof onInterim === 'function') onInterim(clean);
+      }
+      const lastRes = ev.results && ev.results[ev.results.length - 1];
+      if (lastRes && lastRes.isFinal && latestText) {
+        finalized = true;
+        if (typeof onFinal === 'function') onFinal(latestText);
+      }
+    };
+
+    rec.onerror = (ev) => {
+      const code = ev && ev.error;
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        showToast('ไม่ได้รับสิทธิ์ใช้ไมโครโฟน — กรุณากดไอคอนหน้าแถบ URL เพื่ออนุญาตไมโครโฟน');
+      } else if (code === 'audio-capture') {
+        showToast('ไม่พบไมโครโฟนในอุปกรณ์ของคุณ');
+      } else if (code === 'no-speech') {
+        showToast('ไม่ได้ยินเสียงพูด — ลองกดไมโครโฟนแล้วพูดใหม่อีกครั้ง');
+      } else if (code === 'network') {
+        showToast('บริการรับเสียงของเบราว์เซอร์ขัดข้อง — กรุณาพิมพ์ค้นหาแทน');
+      } else if (code !== 'aborted') {
+        showToast('ไม่สามารถรับเสียงพูดได้ในขณะนี้ ลองกดใหม่อีกครั้ง');
+      }
+    };
+
+    rec.onend = () => {
+      isListening = false;
+      activeRec = null;
+      btn.classList.remove('is-active');
+      btn.setAttribute('aria-pressed', 'false');
+      input.placeholder = origPlaceholder;
+      if (!finalized && latestText) {
+        finalized = true;
+        if (typeof onFinal === 'function') onFinal(latestText);
+      }
+    };
+
+    try {
+      rec.start();
+    } catch {
+      isListening = false;
+      activeRec = null;
+      btn.classList.remove('is-active');
+      btn.setAttribute('aria-pressed', 'false');
+      input.placeholder = origPlaceholder;
+      showToast('ไม่สามารถเริ่มรับเสียงพูดได้ ลองกดไมโครโฟนใหม่อีกครั้ง');
+    }
+  });
 }
 
 /* ---------- Crowdsourced Data Verification Modal (#reportModal) ---------- */
