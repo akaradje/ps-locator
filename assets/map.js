@@ -105,7 +105,8 @@
     return String(s || '')
       .normalize('NFC')
       .toLowerCase()
-      .replace(/สถานีตำรวจภูธร|สถานีตำรวจนครบาล|สถานีตำรวจ|สภ\.|สน\.|จว\.|จังหวัด|จ\.|[\s\.\-\(\)\/]/g, '');
+      .replace(/metropolitan\s+police\s+station|provincial\s+police\s+station|police\s+station|police\s+box|pol\.?\s*sta\.?/gi, '')
+      .replace(/สถานีตำรวจภูธร|สถานีตำรวจนครบาล|สถานีตำรวจ|สภ\.|สน\.|จว\.|จังหวัด|จ\.|[\s\.\-\(\)\/,]/g, '');
   }
 
   function normAdmin(s) {
@@ -257,30 +258,137 @@
     return coordsLoadPromise;
   }
 
-  /* Match an OSM police POI name against official STATIONS */
+  /* Match an OSM police POI name against official STATIONS (Zero Hallucination) */
+  function thaiConsonantKey(s) {
+    const clean = normStation(s).replace(/ำ/g, 'ม').replace(/[^ก-ฮ]/g, '');
+    if (!clean) return '';
+    const map = {
+      'ก':'k','ข':'k','ฃ':'k','ค':'k','ฅ':'k','ฆ':'k',
+      'ง':'ng',
+      'จ':'c','ฉ':'c','ช':'c','ซ':'s','ฌ':'c',
+      'ญ':'y','ฎ':'d','ฏ':'t','ฐ':'t','ฑ':'t','ฒ':'t','ณ':'n',
+      'ด':'d','ต':'t','ถ':'t','ท':'t','ธ':'t','น':'n',
+      'บ':'b','ป':'p','ผ':'p','ฝ':'f','พ':'p','ฟ':'f','ภ':'p','ม':'m',
+      'ย':'y','ร':'r','ล':'l','ว':'w',
+      'ศ':'s','ษ':'s','ส':'s','ห':'h','ฬ':'l','อ':'','ฮ':'h'
+    };
+    let out = '';
+    for (let i = 0; i < clean.length; i++) {
+      const ch = clean[i];
+      /* Final ร/ล/ญ/ณ in Thai syllables often romanize as 'n' (e.g., ชุมพร -> chumphon) */
+      if (i === clean.length - 1 && (ch === 'ร' || ch === 'ล' || ch === 'ญ' || ch === 'ณ')) {
+        out += 'n';
+      } else {
+        out += map[ch] || '';
+      }
+    }
+    return out.replace(/(.)\1+/g, '$1');
+  }
+
+  function latinConsonantKey(s) {
+    const stripped = String(s || '')
+      .toLowerCase()
+      .replace(/metropolitan\s+police\s+station|provincial\s+police\s+station|police\s+station|police\s+box|pol\.?\s*sta\.?|police/gi, ' ')
+      .replace(/[^a-z]+/g, ' ')
+      .trim();
+    if (!stripped) return '';
+    const norm = stripped
+      .replace(/ph/g, 'p')
+      .replace(/th/g, 't')
+      .replace(/kh/g, 'k')
+      .replace(/ch/g, 'c')
+      .replace(/ng/g, 'NG')
+      .replace(/[aeiouy\s]/g, '')
+      .replace(/j/g, 'c')
+      .replace(/g/g, 'k')
+      .replace(/v/g, 'w')
+      .replace(/z/g, 's')
+      .replace(/NG/g, 'ng')
+      .replace(/r$/g, 'n');
+    return norm.replace(/(.)\1+/g, '$1');
+  }
+
   const ST_INDEX = STATIONS.map(function (st) {
-    return { st: st, key: normStation(st.name), prov: normAdmin(st.province_th) };
+    return {
+      st: st,
+      key: normStation(st.name),
+      cKey: thaiConsonantKey(st.name),
+      prov: normAdmin(st.province_th)
+    };
   });
 
-  function matchOfficialStation(poiName, provinceHint) {
-    const key = normStation(poiName);
-    if (!key || key.length < 2) return null;
-    const pHint = normAdmin(provinceHint || '');
+  function isSameProvince(entryProv, pHint) {
+    if (!pHint || !entryProv) return false;
+    return entryProv === pHint || entryProv.includes(pHint) || pHint.includes(entryProv);
+  }
+
+  function scoreOfficialMatch(rawName, pHint) {
+    const raw = String(rawName || '').trim();
+    if (!raw) return null;
+    const keys = [];
+    const fullKey = normStation(raw);
+    if (fullKey && fullKey.length >= 2) keys.push(fullKey);
+    const thaiOnly = normStation(raw.replace(/[A-Za-z]+/g, ' '));
+    if (thaiOnly && thaiOnly.length >= 2 && keys.indexOf(thaiOnly) === -1) keys.push(thaiOnly);
+    if (pHint && fullKey === 'เมือง') keys.push('เมือง' + pHint);
+    if (pHint && thaiOnly === 'เมือง' && keys.indexOf('เมือง' + pHint) === -1) keys.push('เมือง' + pHint);
+
     let best = null;
     let bestScore = 0;
-    for (let i = 0; i < ST_INDEX.length; i++) {
-      const entry = ST_INDEX[i];
-      let score = 0;
-      if (entry.key === key) score = 100;
-      else if (entry.key.length >= 3 && key.includes(entry.key)) score = 75;
-      else if (key.length >= 3 && entry.key.includes(key)) score = 60;
-      if (!score) continue;
-      if (pHint && entry.prov && (entry.prov === pHint || entry.prov.includes(pHint) || pHint.includes(entry.prov))) {
-        score += 30;
+    for (let k = 0; k < keys.length; k++) {
+      const key = keys[k];
+      for (let i = 0; i < ST_INDEX.length; i++) {
+        const entry = ST_INDEX[i];
+        const sameProv = isSameProvince(entry.prov, pHint);
+        let score = 0;
+        if (entry.key === key) {
+          score = 100;
+        } else if (!pHint || sameProv) {
+          /* Restrict substring matching to same province when provinceHint is known (prevents cross-province false positives) */
+          if (entry.key.length >= 3 && key.includes(entry.key)) score = 75;
+          else if (key.length >= 3 && key !== 'เมือง' && entry.key.includes(key)) score = 60;
+        }
+        if (!score) continue;
+        if (sameProv) score += 30;
+        if (score > bestScore) { bestScore = score; best = entry.st; }
       }
-      if (score > bestScore) { bestScore = score; best = entry.st; }
     }
-    return bestScore >= 60 ? best : null;
+
+    /* English/Latin OSM name fallback (strictly within same province & exact consonant skeleton) */
+    if (!best && pHint && /[A-Za-z]{3,}/.test(raw)) {
+      const lKey = latinConsonantKey(raw);
+      if (lKey && lKey.length >= 4) {
+        for (let i = 0; i < ST_INDEX.length; i++) {
+          const entry = ST_INDEX[i];
+          if (!isSameProvince(entry.prov, pHint) || !entry.cKey) continue;
+          if (entry.cKey === lKey) {
+            best = entry.st;
+            bestScore = 95;
+            break;
+          }
+        }
+      }
+    }
+
+    return bestScore >= 60 ? { st: best, score: bestScore } : null;
+  }
+
+  function matchOfficialStation(poiName, provinceHint) {
+    const pHint = normAdmin(provinceHint || '');
+    if (Array.isArray(poiName)) {
+      let best = null;
+      let bestScore = 0;
+      for (let i = 0; i < poiName.length; i++) {
+        const res = scoreOfficialMatch(poiName[i], pHint);
+        if (res && res.score > bestScore) {
+          bestScore = res.score;
+          best = res.st;
+        }
+      }
+      return best;
+    }
+    const res = scoreOfficialMatch(poiName, pHint);
+    return res ? res.st : null;
   }
 
   /* =====================================================================
@@ -1210,8 +1318,161 @@
   }
 
   /* =====================================================================
-     7. Nearby Police Stations (Registry + OSM Cache + Nominatim + Offline Fallback)
+     7. Nearby Police Stations (Multi-Source: Overpass + Nominatim + Jurisdiction-First)
   ===================================================================== */
+  function createTimeoutSignal(ms, parentSignal) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, ms);
+    const onParentAbort = function () { clearTimeout(timer); ctrl.abort(); };
+    if (parentSignal) {
+      if (parentSignal.aborted) {
+        clearTimeout(timer);
+        ctrl.abort();
+      } else {
+        parentSignal.addEventListener('abort', onParentAbort, { once: true });
+      }
+    }
+    return {
+      signal: ctrl.signal,
+      cleanup: function () {
+        clearTimeout(timer);
+        if (parentSignal) parentSignal.removeEventListener('abort', onParentAbort);
+      }
+    };
+  }
+
+  function fetchOverpassPolice(lat, lon, parentSignal) {
+    const q =
+      '[out:json][timeout:6];' +
+      'nwr["amenity"="police"](around:20000,' + lat.toFixed(5) + ',' + lon.toFixed(5) + ');' +
+      'out center 40;';
+    const endpoints = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter'
+    ];
+
+    const tryEndpoint = function (idx) {
+      if (idx >= endpoints.length) return Promise.reject(new Error('Overpass unavailable'));
+      const t = createTimeoutSignal(idx === 0 ? 5500 : 4500, parentSignal);
+      return fetch(endpoints[idx], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: 'data=' + encodeURIComponent(q),
+        signal: t.signal
+      })
+        .then(function (r) { if (!r.ok) throw new Error('Overpass HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          t.cleanup();
+          const els = data && Array.isArray(data.elements) ? data.elements : [];
+          const out = [];
+          for (let i = 0; i < els.length; i++) {
+            const el = els[i];
+            const pLat = typeof el.lat === 'number' ? el.lat : (el.center && typeof el.center.lat === 'number' ? el.center.lat : NaN);
+            const pLon = typeof el.lon === 'number' ? el.lon : (el.center && typeof el.center.lon === 'number' ? el.center.lon : NaN);
+            if (!isFinite(pLat) || !isFinite(pLon)) continue;
+            const tags = el.tags || {};
+            const names = [tags['name:th'], tags.name, tags.official_name, tags.short_name, tags.alt_name, tags['name:en']].filter(Boolean);
+            if (!names.length) continue;
+            out.push({ lat: pLat, lon: pLon, names: names, rawName: names[0], isOverpass: true });
+          }
+          return out;
+        })
+        .catch(function (err) {
+          t.cleanup();
+          if (parentSignal && parentSignal.aborted) throw err;
+          return tryEndpoint(idx + 1);
+        });
+    };
+    return tryEndpoint(0);
+  }
+
+  function fetchNominatimPolice(lat, lon, queryText, parentSignal, deltaOverride) {
+    const t = createTimeoutSignal(6000, parentSignal);
+    const delta = deltaOverride || 0.18;
+    const viewbox = [
+      (lon - delta).toFixed(4),
+      (lat + delta).toFixed(4),
+      (lon + delta).toFixed(4),
+      (lat - delta).toFixed(4)
+    ].join(',');
+    const url =
+      'https://nominatim.openstreetmap.org/search?format=json&accept-language=th,en&bounded=1&limit=15&viewbox=' +
+      encodeURIComponent(viewbox) +
+      '&q=' + encodeURIComponent(queryText);
+    return fetch(url, { signal: t.signal })
+      .then(function (r) { if (!r.ok) throw new Error('Nominatim police lookup failed'); return r.json(); })
+      .then(function (list) {
+        const els = Array.isArray(list) ? list : [];
+        const out = [];
+        for (let i = 0; i < els.length; i++) {
+          const el = els[i];
+          const pLat = Number(el.lat), pLon = Number(el.lon);
+          if (!isFinite(pLat) || !isFinite(pLon)) continue;
+          const firstPart = el.display_name ? el.display_name.split(',')[0].trim() : '';
+          const rawName = (el.name || firstPart || '').trim();
+          if (!rawName || el.class === 'highway' || /^(ซอย|ถนน|แยก|ป้ายรถ|สะพาน)/.test(rawName)) continue;
+          const isPoliceAmenity = el.type === 'police' || (el.class === 'amenity' && /police/i.test(el.type || ''));
+          const hasPoliceKeyword = /(สถานีตำรวจ|สภ\.|สน\.|police\s+station)/i.test(rawName);
+          if (!isPoliceAmenity && !hasPoliceKeyword) continue;
+          const names = [el.name, firstPart].filter(Boolean);
+          out.push({ lat: pLat, lon: pLon, names: names, rawName: rawName, isOverpass: false });
+        }
+        return out;
+      })
+      .finally(t.cleanup);
+  }
+
+  function lookupOfficialStationCoord(st, originLat, originLon, parentSignal) {
+    if (!st) return Promise.resolve(null);
+    const id = String(st.id);
+    if (STATION_COORDS.has(id)) {
+      const p = STATION_COORDS.get(id);
+      return Promise.resolve({ lat: p[0], lon: p[1], st: st });
+    }
+    if (OSM_COORD_CACHE.has(id)) {
+      const p = OSM_COORD_CACHE.get(id);
+      return Promise.resolve({ lat: p[0], lon: p[1], st: st });
+    }
+    const prov = st.province_th || '';
+    const expanded = st.name
+      .replace(/^สภ\./, 'สถานีตำรวจภูธร')
+      .replace(/^สน\./, 'สถานีตำรวจนครบาล');
+    const queries = [st.name + (prov ? ' ' + prov : '')];
+    if (expanded !== st.name) queries.push(expanded + (prov ? ' ' + prov : ''));
+
+    const tryQuery = function (idx) {
+      if (idx >= queries.length) return Promise.resolve(null);
+      const t = createTimeoutSignal(6000, parentSignal);
+      const url =
+        'https://nominatim.openstreetmap.org/search?format=json&accept-language=th,en&countrycodes=th&limit=5&q=' +
+        encodeURIComponent(queries[idx]);
+      return fetch(url, { signal: t.signal })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (list) {
+          t.cleanup();
+          const els = Array.isArray(list) ? list : [];
+          for (let i = 0; i < els.length; i++) {
+            const el = els[i];
+            const pLat = Number(el.lat), pLon = Number(el.lon);
+            if (!isFinite(pLat) || !isFinite(pLon)) continue;
+            if (haversineKm(originLat, originLon, pLat, pLon) > 80) continue;
+            const firstPart = el.display_name ? el.display_name.split(',')[0].trim() : '';
+            const matched = matchOfficialStation([el.name, firstPart].filter(Boolean), prov);
+            /* Strictly accept only if the OSM result actually matches this exact official station */
+            if (matched && String(matched.id) === id) {
+              return { lat: pLat, lon: pLon, st: st };
+            }
+          }
+          return tryQuery(idx + 1);
+        })
+        .catch(function () {
+          t.cleanup();
+          return tryQuery(idx + 1);
+        });
+    };
+    return tryQuery(0);
+  }
+
   function collectLocalCoordCandidates(lat, lon) {
     const items = [];
     const seen = new Set();
@@ -1229,7 +1490,8 @@
             lat: pair[0],
             lon: pair[1],
             distKm: dist,
-            official: st
+            official: st,
+            isJurisdiction: false
           });
         }
       });
@@ -1239,122 +1501,234 @@
     return items;
   }
 
-  function renderNearbyStations(lat, lon, admin, signal) {
+  function renderNearbyStations(lat, lon, admin, signal, jurPromise) {
     if (!nearbyStationsBox) return Promise.resolve();
     nearbyStationsBox.hidden = false;
     nearbyStationsBox.innerHTML =
       '<div class="map-sec-head"><span>สภ./สน. ใกล้ตำแหน่งนี้</span><small>กำลังค้นหาสถานีตำรวจใกล้เคียง…</small></div>';
 
-    return loadStationCoords().then(function () {
-      const localCandidates = collectLocalCoordCandidates(lat, lon);
-
-      const delta = 0.18;
-      const viewbox = [
-        (lon - delta).toFixed(4),
-        (lat + delta).toFixed(4),
-        (lon + delta).toFixed(4),
-        (lat - delta).toFixed(4)
-      ].join(',');
-      const nomUrl =
-        'https://nominatim.openstreetmap.org/search?format=json&accept-language=th,en&bounded=1&limit=12&viewbox=' +
-        encodeURIComponent(viewbox) +
-        '&q=' + encodeURIComponent('สถานีตำรวจ');
-
-      return fetch(nomUrl, { signal: signal })
-        .then(function (r) { if (!r.ok) throw new Error('Nominatim police lookup failed'); return r.json(); })
-        .then(function (list) {
-          const els = Array.isArray(list) ? list : [];
-          const seen = new Set();
-          const items = [];
-          let addedToCache = false;
-
-          for (let i = 0; i < localCandidates.length; i++) {
-            const c = localCandidates[i];
-            const k = c.official ? 'id:' + c.official.id : 'n:' + normStation(c.name);
-            seen.add(k);
-            items.push(c);
-          }
-
-          for (let i = 0; i < els.length; i++) {
-            const el = els[i];
-            const pLat = Number(el.lat), pLon = Number(el.lon);
-            if (!isFinite(pLat) || !isFinite(pLon)) continue;
-            const rawName = el.name || (el.display_name ? el.display_name.split(',')[0] : '');
-            if (!rawName || el.class === 'highway' || /^(ซอย|ถนน|แยก|ป้ายรถ)/.test(rawName)) continue;
-            const official = matchOfficialStation(rawName, admin.province);
-            const displayName = official ? official.name : rawName;
-            const dedupKey = official ? 'id:' + official.id : 'n:' + normStation(rawName);
-            if (official && !STATION_COORDS.has(String(official.id)) && !OSM_COORD_CACHE.has(String(official.id))) {
-              OSM_COORD_CACHE.set(String(official.id), [pLat, pLon]);
-              addedToCache = true;
-            }
-            if (seen.has(dedupKey)) continue;
-            seen.add(dedupKey);
-            items.push({
-              name: displayName,
-              lat: pLat,
-              lon: pLon,
-              distKm: haversineKm(lat, lon, pLat, pLon),
-              official: official
-            });
-          }
-
-          if (addedToCache) persistOsmCoordCache();
-
-          items.sort(function (a, b) { return a.distKm - b.distKm; });
-          const top = items.slice(0, 6);
-          if (top.length) {
-            drawNearbyStationList(top, lat, lon, true);
-          } else {
-            drawFallbackAreaStations(admin, lat, lon);
-          }
-        })
-        .catch(function (err) {
-          if (err && err.name === 'AbortError') return;
-          if (localCandidates.length) {
-            localCandidates.sort(function (a, b) { return a.distKm - b.distKm; });
-            drawNearbyStationList(localCandidates.slice(0, 6), lat, lon, true);
-          } else {
-            drawFallbackAreaStations(admin, lat, lon);
+    return Promise.all([
+      loadStationCoords(),
+      Promise.resolve(jurPromise).catch(function () { return null; })
+    ]).then(function (bootResults) {
+      if (signal && signal.aborted) return;
+      const jurRes = bootResults[1];
+      const jurStations = [];
+      const jurIdSet = new Set();
+      if (jurRes && jurRes.found && Array.isArray(jurRes.found.recs)) {
+        jurRes.found.recs.forEach(function (rec) {
+          const st = ST_BY_ID.get(String(rec.id));
+          if (st && !jurIdSet.has(String(st.id))) {
+            jurIdSet.add(String(st.id));
+            jurStations.push(st);
           }
         });
+      }
+
+      const localCandidates = collectLocalCoordCandidates(lat, lon);
+      const isBkk = admin.province === 'กรุงเทพมหานคร';
+      const shortPrefix = isBkk ? 'สน.' : 'สภ.';
+      const urbanDelta = isBkk ? 0.08 : 0.18;
+      const primaryJur = jurStations[0] || null;
+      const needDirectJurLookup = Boolean(
+        primaryJur &&
+        !STATION_COORDS.has(String(primaryJur.id)) &&
+        !OSM_COORD_CACHE.has(String(primaryJur.id))
+      );
+
+      const tasks = [
+        fetchOverpassPolice(lat, lon, signal),
+        fetchNominatimPolice(lat, lon, 'police', signal, urbanDelta),
+        fetchNominatimPolice(lat, lon, 'สถานีตำรวจ', signal, urbanDelta),
+        fetchNominatimPolice(lat, lon, shortPrefix, signal, urbanDelta),
+        needDirectJurLookup ? lookupOfficialStationCoord(primaryJur, lat, lon, signal) : Promise.resolve(null)
+      ];
+
+      return Promise.allSettled(tasks).then(function (settled) {
+        if (signal && signal.aborted) return;
+
+        const byKey = new Map();
+        let addedToCache = false;
+
+        function upsertItem(entry) {
+          const key = entry.official ? 'id:' + entry.official.id : 'n:' + normStation(entry.name);
+          if (!key || key === 'n:') return;
+          const prev = byKey.get(key);
+          if (!prev) {
+            byKey.set(key, entry);
+            return;
+          }
+          const prevHasCoord = isFinite(prev.lat) && isFinite(prev.lon);
+          const nextHasCoord = isFinite(entry.lat) && isFinite(entry.lon);
+          const mergedJur = Boolean(prev.isJurisdiction || entry.isJurisdiction);
+          if (!prevHasCoord && nextHasCoord) {
+            byKey.set(key, Object.assign({}, entry, { isJurisdiction: mergedJur }));
+          } else if (prevHasCoord && nextHasCoord && entry.distKm < prev.distKm) {
+            byKey.set(key, Object.assign({}, entry, { isJurisdiction: mergedJur }));
+          } else {
+            prev.isJurisdiction = mergedJur;
+            if (!prev.official && entry.official) prev.official = entry.official;
+          }
+        }
+
+        /* 1. Local registry & cached OSM coordinates */
+        for (let i = 0; i < localCandidates.length; i++) {
+          const c = localCandidates[i];
+          c.isJurisdiction = Boolean(c.official && jurIdSet.has(String(c.official.id)));
+          upsertItem(c);
+        }
+
+        /* 2. Overpass + Nominatim multi-source POIs */
+        for (let tIdx = 0; tIdx < 4; tIdx++) {
+          if (settled[tIdx].status !== 'fulfilled' || !Array.isArray(settled[tIdx].value)) continue;
+          const pois = settled[tIdx].value;
+          for (let i = 0; i < pois.length; i++) {
+            const poi = pois[i];
+            const official = matchOfficialStation(poi.names, admin.province);
+            /* Filter out generic police booths / non-station POIs if not matched to official STATIONS */
+            if (!official) {
+              const joined = poi.names.join(' ');
+              if (!/(สถานีตำรวจ|สภ\.|สน\.|police\s+station)/i.test(joined)) continue;
+            }
+            const displayName = official ? official.name : poi.rawName;
+            const distKm = haversineKm(lat, lon, poi.lat, poi.lon);
+            if (official && !STATION_COORDS.has(String(official.id)) && !OSM_COORD_CACHE.has(String(official.id))) {
+              OSM_COORD_CACHE.set(String(official.id), [poi.lat, poi.lon]);
+              addedToCache = true;
+            }
+            upsertItem({
+              name: displayName,
+              lat: poi.lat,
+              lon: poi.lon,
+              distKm: distKm,
+              official: official,
+              isJurisdiction: Boolean(official && jurIdSet.has(String(official.id)))
+            });
+          }
+        }
+
+        /* 3. Direct coordinate lookup result for primary jurisdiction station */
+        const directJurRes = settled[4].status === 'fulfilled' ? settled[4].value : null;
+        if (directJurRes && directJurRes.st && isFinite(directJurRes.lat) && isFinite(directJurRes.lon)) {
+          const st = directJurRes.st;
+          if (!STATION_COORDS.has(String(st.id)) && !OSM_COORD_CACHE.has(String(st.id))) {
+            OSM_COORD_CACHE.set(String(st.id), [directJurRes.lat, directJurRes.lon]);
+            addedToCache = true;
+          }
+          upsertItem({
+            name: st.name,
+            lat: directJurRes.lat,
+            lon: directJurRes.lon,
+            distKm: haversineKm(lat, lon, directJurRes.lat, directJurRes.lon),
+            official: st,
+            isJurisdiction: true
+          });
+        }
+
+        /* 4. Jurisdiction-First Guarantee: ensure every jurisdiction station is present */
+        const noCoordJurItems = [];
+        for (let i = 0; i < jurStations.length; i++) {
+          const st = jurStations[i];
+          const key = 'id:' + st.id;
+          const existing = byKey.get(key);
+          if (existing) {
+            existing.isJurisdiction = true;
+          } else {
+            const pair = STATION_COORDS.get(String(st.id)) || OSM_COORD_CACHE.get(String(st.id));
+            if (pair && isFinite(pair[0]) && isFinite(pair[1])) {
+              upsertItem({
+                name: st.name,
+                lat: pair[0],
+                lon: pair[1],
+                distKm: haversineKm(lat, lon, pair[0], pair[1]),
+                official: st,
+                isJurisdiction: true
+              });
+            } else {
+              noCoordJurItems.push({
+                name: st.name,
+                lat: NaN,
+                lon: NaN,
+                distKm: NaN,
+                official: st,
+                isJurisdiction: true
+              });
+            }
+          }
+        }
+
+        if (addedToCache) persistOsmCoordCache();
+
+        const withCoords = [];
+        byKey.forEach(function (val) {
+          if (isFinite(val.lat) && isFinite(val.lon) && isFinite(val.distKm)) {
+            withCoords.push(val);
+          }
+        });
+        withCoords.sort(function (a, b) { return a.distKm - b.distKm; });
+
+        /* Build final top list: unlocated jurisdiction station(s) pinned at #1, then distance-sorted */
+        let top = noCoordJurItems.concat(withCoords).slice(0, 6);
+
+        /* If a located jurisdiction station fell outside top 6, include it without losing nearest */
+        for (let i = 0; i < withCoords.length; i++) {
+          if (withCoords[i].isJurisdiction && top.indexOf(withCoords[i]) === -1) {
+            top = top.slice(0, 5).concat([withCoords[i]]);
+          }
+        }
+
+        if (top.length) {
+          const hasAnyCoords = top.some(function (it) { return isFinite(it.lat) && isFinite(it.lon); });
+          drawNearbyStationList(top, lat, lon, hasAnyCoords);
+        } else {
+          drawFallbackAreaStations(admin, lat, lon);
+        }
+      });
     });
   }
 
   function drawNearbyStationList(items, originLat, originLon, hasCoords) {
-    currentNearbyFeatures = hasCoords ? items : [];
+    const coordItems = items.filter(function (it) { return isFinite(it.lat) && isFinite(it.lon); });
+    currentNearbyFeatures = coordItems;
     refreshStationClusterSource();
 
     if (sosActive) {
       sosState.nearest = items.slice(0, 3);
-      sosState.hasCoords = hasCoords;
+      sosState.hasCoords = Boolean(hasCoords || coordItems.length);
       renderSOSPanel();
     }
 
     nearbyStationsBox.innerHTML =
       '<div class="map-sec-head">' +
         '<span>สภ./สน. ใกล้ตำแหน่งนี้</span>' +
-        '<small>' + (hasCoords ? 'เรียงตามระยะทางจริง' : 'ในพื้นที่เดียวกัน') + '</small>' +
+        '<small>' + (coordItems.length ? 'เรียงตามระยะทางจริง' : 'ในพื้นที่เดียวกัน') + '</small>' +
       '</div>';
 
     items.forEach(function (it) {
       const card = document.createElement('div');
-      card.className = 'map-station-card';
+      card.className = 'map-station-card' + (it.isJurisdiction ? ' is-jurisdiction' : '');
       const st = it.official;
       const phone = st && st.phone ? formatPhone(st.phone) : 'ไม่มีข้อมูล';
       const digits = st && st.phone ? phoneDigits(st.phone) : '';
       const shortName = it.name.replace(/^สภ\.|^สน\./, '').trim();
-      const navDest = hasCoords
+      const itemHasCoord = isFinite(it.lat) && isFinite(it.lon) && typeof it.distKm === 'number' && isFinite(it.distKm);
+      const navDest = itemHasCoord
         ? it.lat.toFixed(5) + ',' + it.lon.toFixed(5)
-        : it.name + (st ? ' ' + st.province_th : '');
+        : (st ? (st.name + (st.address ? ' ' + st.address : ' ' + st.province_th)) : it.name);
       const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' +
         encodeURIComponent(originLat.toFixed(5) + ',' + originLon.toFixed(5)) +
         '&destination=' + encodeURIComponent(navDest);
 
+      const badgesHtml =
+        '<div class="map-badges-wrap">' +
+          (it.isJurisdiction ? '<span class="map-badge map-badge-jur">เขตอำนาจพื้นที่นี้</span>' : '') +
+          (itemHasCoord ? '<span class="map-dist">' + it.distKm.toFixed(1) + ' กม.</span>' : '') +
+        '</div>';
+
       card.innerHTML =
         '<div class="map-jur-top">' +
           '<button type="button" class="map-st-focus">' + esc(it.name) + '</button>' +
-          (hasCoords ? '<span class="map-dist">' + it.distKm.toFixed(1) + ' กม.</span>' : '') +
+          badgesHtml +
         '</div>' +
         '<div class="map-jur-sub">' +
           (st ? (esc(st.province_th) + ' · โทร ' + esc(phone)) : 'ตำแหน่งสถานีตำรวจจาก OpenStreetMap') +
@@ -1367,7 +1741,7 @@
         '</div>';
 
       const focusBtn = card.querySelector('.map-st-focus');
-      if (focusBtn && hasCoords) {
+      if (focusBtn && itemHasCoord) {
         focusBtn.addEventListener('click', function () {
           ensureMapInitialized().then(function (m) {
             if (!m) return;
@@ -1407,7 +1781,7 @@
       if (ampMatches.length) list = ampMatches;
     }
     const top = list.slice(0, 5).map(function (st) {
-      return { name: st.name, official: st, distKm: 0 };
+      return { name: st.name, official: st, lat: NaN, lon: NaN, distKm: NaN, isJurisdiction: false };
     });
     if (top.length) {
       drawNearbyStationList(top, originLat, originLon, false);
@@ -1423,8 +1797,8 @@
 
     const handleAdmin = function (addrObj, displayName) {
       const admin = extractAdminFromAddress(addrObj, displayName);
-      renderJurisdictionBox(admin, latNum, lonNum);
-      renderNearbyStations(latNum, lonNum, admin, signal);
+      const jurTask = renderJurisdictionBox(admin, latNum, lonNum);
+      renderNearbyStations(latNum, lonNum, admin, signal, jurTask);
     };
 
     if (item.address) {
@@ -1524,24 +1898,29 @@
           const st = it.official;
           const phone = st && st.phone ? formatPhone(st.phone) : 'ไม่มีข้อมูล';
           const digits = st && st.phone ? phoneDigits(st.phone) : '';
-          const navDest = sosState.hasCoords && isFinite(it.lat) && isFinite(it.lon)
+          const itemHasCoord = isFinite(it.lat) && isFinite(it.lon) && typeof it.distKm === 'number' && isFinite(it.distKm);
+          const navDest = itemHasCoord
             ? it.lat.toFixed(5) + ',' + it.lon.toFixed(5)
-            : it.name + (st ? ' ' + st.province_th : '');
+            : (st ? (st.name + (st.address ? ' ' + st.address : ' ' + st.province_th)) : it.name);
           const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' +
             encodeURIComponent(coordStr) +
             '&destination=' + encodeURIComponent(navDest);
-          const distBadge = sosState.hasCoords && isFinite(it.distKm)
-            ? '<span class="map-dist">' + it.distKm.toFixed(1) + ' กม.</span>'
-            : '<span class="map-badge">พื้นที่ใกล้เคียง</span>';
+          const badges =
+            '<div class="map-badges-wrap">' +
+              (it.isJurisdiction ? '<span class="map-badge map-badge-jur">เขตอำนาจพื้นที่นี้</span>' : '') +
+              (itemHasCoord
+                ? '<span class="map-dist">' + it.distKm.toFixed(1) + ' กม.</span>'
+                : (!it.isJurisdiction ? '<span class="map-badge">พื้นที่ใกล้เคียง</span>' : '')) +
+            '</div>';
           return (
-            '<div class="sos-station-item">' +
+            '<div class="sos-station-item' + (it.isJurisdiction ? ' is-jurisdiction' : '') + '">' +
               '<div class="sos-station-top">' +
                 '<span class="sos-rank">' + (idx + 1) + '</span>' +
                 '<div class="sos-station-info">' +
                   '<strong>' + esc(it.name) + '</strong>' +
                   '<div class="sos-station-sub">' + esc(st ? st.province_th + ' · โทร ' + phone : 'สถานีตำรวจจาก OSM') + '</div>' +
                 '</div>' +
-                distBadge +
+                badges +
               '</div>' +
               '<div class="sos-station-actions">' +
                 (digits

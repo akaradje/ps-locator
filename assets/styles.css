@@ -2040,10 +2040,22 @@ html[data-theme="light"] {
   max-height: 540px;
 }
 
+.page-map .panel-header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .page-map .source-tag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: auto;
+  flex: none;
+  align-self: center;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
   padding: 3px 9px;
@@ -2496,6 +2508,14 @@ body.is-sos-mode .hud-sos-btn {
 }
 .map-st-focus:hover { color: var(--brand-ink); text-decoration: underline; }
 
+.map-badges-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: none;
+}
 .map-badge,
 .map-dist {
   flex: none;
@@ -2506,6 +2526,18 @@ body.is-sos-mode .hud-sos-btn {
   background: var(--brand-tint);
   color: var(--brand-ink);
   border: 1px solid var(--brand-line);
+  white-space: nowrap;
+}
+.map-badge-jur {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  background: var(--brand-tint);
+  color: var(--brand-ink);
+  border-color: var(--brand-line);
+}
+.map-station-card.is-jurisdiction,
+.sos-station-item.is-jurisdiction {
+  border-color: var(--brand-line);
 }
 .map-dist {
   background: rgba(245, 158, 11, 0.14);
