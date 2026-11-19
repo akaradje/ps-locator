@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'v1.7.0-p2';
+const CACHE_VERSION = 'v1.7.0-p3';
 const SHELL_CACHE = 'ps-locator-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'ps-locator-data-' + CACHE_VERSION;
 
@@ -154,8 +154,8 @@ self.addEventListener('fetch', (event) => {
   /* External origins: never cache or block offline */
   if (url.origin !== self.location.origin) return;
 
-  /* Hard rule: NEVER cache /api/* endpoints */
-  if (url.pathname.startsWith('/api/')) return;
+  /* Hard rule: NEVER cache /api/* or dynamic /og endpoints */
+  if (url.pathname.startsWith('/api/') || url.pathname === '/og') return;
 
   /* HTML navigations: Network-First with Cache Fallback */
   if (request.mode === 'navigate') {

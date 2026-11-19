@@ -4,6 +4,10 @@
    Themes via html[data-theme="dark" | "light"]
    ============================================================ */
 
+@view-transition {
+  navigation: auto;
+}
+
 @property --beam-angle {
   syntax: "<angle>";
   initial-value: 0deg;
@@ -70,7 +74,10 @@ html[data-theme="dark"] {
   --shadow-panel: 0 20px 50px -12px rgba(0, 0, 0, 0.6);
 
   --ring: 0 0 0 3px rgba(56, 189, 248, 0.24);
-  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--brand);
+  --focus-ring: #7dd3fc;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4.5px var(--focus-ring);
+  --skip-bg: #7dd3fc;
+  --skip-ink: #05070c;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --font-serif: "Noto Serif Thai", "Sarabun", serif;
@@ -143,6 +150,10 @@ html[data-theme="light"] {
   --shadow-panel: 0 20px 48px -12px rgba(15, 23, 42, 0.10);
 
   --ring: 0 0 0 3px rgba(2, 132, 199, 0.18);
+  --focus-ring: #075985;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4.5px var(--focus-ring);
+  --skip-bg: #075985;
+  --skip-ink: #ffffff;
   color-scheme: light;
 }
 
@@ -153,12 +164,32 @@ html {
   scrollbar-color: var(--border-strong) transparent;
 }
 
+/* Cross-document View Transitions */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease);
+}
+
+::view-transition-group(ps-chrome),
+::view-transition-group(ps-brand),
+::view-transition-group(ps-nav),
+::view-transition-group(ps-capsule) {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 
@@ -191,12 +222,53 @@ html, body {
 }
 
 .skip-link {
-  position: absolute; left: -9999px; top: 8px; z-index: 1000;
-  background: var(--strip); color: #fff; padding: 10px 18px;
-  border-radius: var(--radius-sm); font-weight: 600; text-decoration: none;
+  position: fixed; left: -9999px; top: 12px; z-index: 1000;
+  background: var(--skip-bg); color: var(--skip-ink); padding: 11px 20px;
+  border-radius: var(--radius-sm); font-weight: 700; font-size: 15px;
+  text-decoration: none; border: 2px solid var(--bg);
+  box-shadow: var(--shadow-lg);
 }
-.skip-link:focus { left: 8px; }
-:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 6px; }
+.skip-link:focus,
+.skip-link:focus-visible {
+  left: 12px;
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--focus), var(--shadow-lg);
+}
+:focus-visible {
+  outline: 2.5px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--focus);
+  border-radius: 6px;
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible,
+.rchip:focus-visible,
+.chip:focus-visible,
+.idle-pill:focus-visible,
+.nav-pill:focus-visible,
+.icon-pill:focus-visible,
+.btn:focus-visible,
+.combo-btn:focus-visible,
+.result-item:focus-visible,
+.jur-tab:focus-visible,
+.jur-card:focus-visible,
+.hud-action-btn:focus-visible,
+.map-mini-btn:focus-visible {
+  outline: 2.5px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--focus);
+}
+.search-capsule:has(.search-input:focus-visible) {
+  outline: 2.5px solid var(--focus-ring);
+  outline-offset: 3px;
+  box-shadow: var(--focus), var(--shadow-capsule);
+}
 
 .mono { font-family: var(--font-mono); font-feature-settings: "tnum"; }
 
@@ -239,6 +311,7 @@ body.page-jur .ambient-aura {
 
 /* ============ TOP CHROME ============ */
 .top-chrome {
+  view-transition-name: ps-chrome;
   position: fixed;
   top: 0;
   left: 0;
@@ -253,6 +326,7 @@ body.page-jur .ambient-aura {
 }
 
 .brand-link {
+  view-transition-name: ps-brand;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
@@ -307,6 +381,7 @@ body.page-jur .ambient-aura {
 }
 
 .nav-pills {
+  view-transition-name: ps-nav;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -452,6 +527,7 @@ body.has-results .orbital-ring { opacity: 0 !important; transform: translate(-50
 }
 
 .search-capsule {
+  view-transition-name: ps-capsule;
   position: relative;
   display: flex;
   align-items: center;

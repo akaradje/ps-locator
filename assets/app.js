@@ -738,6 +738,41 @@ async function copyStation(st, btn) {
   return ok;
 }
 
+async function shareOrCopy({ title, text, url }) {
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title, text, url });
+      return true;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return false;
+    }
+  }
+  return copyText(url, 'คัดลอกลิงก์สำหรับแชร์แล้ว');
+}
+
+function stationShareUrl(st) {
+  try {
+    const u = new URL(window.location.origin + '/');
+    u.searchParams.set('id', String(st.id));
+    return u.toString();
+  } catch {
+    return `?id=${encodeURIComponent(st.id)}`;
+  }
+}
+
+function jurShareUrl(q, tab = 'jur') {
+  try {
+    const u = new URL('jurisdiction.html', window.location.href);
+    u.search = '';
+    u.hash = '';
+    if (q) u.searchParams.set('j', q);
+    u.searchParams.set('jtab', tab || 'jur');
+    return u.toString();
+  } catch {
+    return `jurisdiction.html?j=${encodeURIComponent(q || '')}&jtab=${encodeURIComponent(tab || 'jur')}`;
+  }
+}
+
 /* ---------- Icons (for cards / badges) ---------- */
 const icon = {
   check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -1174,6 +1209,9 @@ function resetAll() {
 }
 
 /* ---------- URL Sync & Read ---------- */
+let pendingStationId = null;
+let activeModalId = null;
+
 function syncURL() {
   try {
     const p = new URLSearchParams();
@@ -1182,6 +1220,7 @@ function syncURL() {
     if (state.region !== 'all') p.set('region', state.region);
     if (state.sort !== 'region') p.set('sort', state.sort);
     if (state.page > 1) p.set('page', String(state.page));
+    if (activeModalId && !$('#jurForm')) p.set('id', String(activeModalId));
     if ($('#jurForm')) {
       if (jurParams.q) p.set('j', jurParams.q);
       if (jurParams.tab !== 'jur') p.set('jtab', jurParams.tab);
@@ -1207,6 +1246,13 @@ function applyURL() {
     if (p.get('sort') && ['region', 'name', 'province'].includes(p.get('sort'))) state.sort = p.get('sort');
     const pg = parseInt(p.get('page') || '1', 10);
     if (pg > 0) state.page = pg;
+    const rawId = p.get('id');
+    if (rawId) {
+      const parsedId = parseInt(rawId, 10);
+      if (Number.isFinite(parsedId) && ST_BY_ID.has(parsedId)) {
+        pendingStationId = parsedId;
+      }
+    }
   } catch { /* ignore */ }
 }
 
@@ -1254,6 +1300,8 @@ function openStationModal(id) {
   dSave.textContent = state.saved.has(st.id) ? 'บันทึกแล้ว ✓' : 'บันทึกสถานีนี้';
   dSave.dataset.id = st.id;
   $('#dPrint').dataset.id = st.id;
+  const dShare = $('#dShare');
+  if (dShare) dShare.dataset.id = st.id;
 
   const addr = hasAddress(st);
   const copyBtn = $('#dCopy');
@@ -1262,6 +1310,9 @@ function openStationModal(id) {
   copyBtn.setAttribute('aria-describedby', 'dCopyPreview');
   $('#dCopyPreview').textContent = addr ? envelopeCopyText(st) : 'ต้นทางยังไม่มีที่อยู่สำหรับสถานีนี้ — กรุณาแจ้งที่อยู่';
   $('#dReport').href = reportURL(st);
+
+  activeModalId = st.id;
+  if (!$('#jurForm')) syncURL();
 
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
@@ -1278,6 +1329,10 @@ function closeStationModal() {
   document.body.style.overflow = '';
   const dMap = $('#dMap');
   if (dMap) dMap.src = 'about:blank';
+  if (activeModalId !== null) {
+    activeModalId = null;
+    if (!$('#jurForm')) syncURL();
+  }
   if (lastFocus && lastFocus.focus) lastFocus.focus();
 }
 
@@ -1746,6 +1801,7 @@ function renderJurResults() {
   const showAddr = R.addrHits.slice(0, 6);
   const more = (R.hits.length + R.addrHits.length) - (showHits.length + showAddr.length);
   const header = `<div class="jur-hints"><span>พบ <b>${R.hits.length + R.addrHits.length}</b> รายการสำหรับ “${esc(R.q)}”</span>
+    <button class="btn btn-outline btn-sm" type="button" id="jurShareBtn">แชร์ผลตรวจ</button>
     <button class="icon-btn" type="button" id="jurCsvBtn">ดาวน์โหลด CSV</button>
     <button class="btn btn-ghost btn-sm" type="button" id="jurClearBtn">ล้างคำค้น</button></div>`;
   const body = showHits.map(h => jurResultCard(h, R.q)).join('') + showAddr.map(h => jurAddressCard(h, R.q)).join('');
@@ -1753,6 +1809,14 @@ function renderJurResults() {
     <p>ไม่พบ “${esc(R.q)}” ในบัญชีแนบท้ายประกาศและในที่อยู่สถานี กรุณาตรวจสอบการสะกดชื่อตำบล หรือเปิดประกาศฉบับเต็ม / สอบถามสถานีโดยตรง</p>
     <a href="https://ratchakitcha.soc.go.th/documents/17187.pdf" target="_blank" rel="noopener">เปิดประกาศฉบับจริง (PDF)</a></div>`;
   box.innerHTML = (R.hits.length + R.addrHits.length ? header + body + (more > 0 ? `<p class="jur-note">แสดง ${showHits.length + showAddr.length} รายการจากทั้งหมด ${R.hits.length + R.addrHits.length} รายการ — พิมพ์ชื่อตำบลให้เฉพาะเจาะจงขึ้นเพื่อจำกัดผลลัพธ์</p>` : '') : empty);
+  $('#jurShareBtn')?.addEventListener('click', () => {
+    const shareUrl = jurShareUrl(jurParams.q || R.q, jurParams.tab || 'jur');
+    shareOrCopy({
+      title: `เขตอำนาจสอบสวน: ${R.q} — PS Locator`,
+      text: `ผลการตรวจสอบเขตอำนาจสอบสวนสำหรับ “${R.q}” (${R.hits.length + R.addrHits.length} รายการ) — PS Locator`,
+      url: shareUrl,
+    });
+  });
   $('#jurCsvBtn')?.addEventListener('click', exportJurisdictionCSV);
   $('#jurClearBtn')?.addEventListener('click', () => jurSearch(''));
 }
@@ -2175,6 +2239,17 @@ function bindGlobalEvents() {
       const st = ST_BY_ID.get(+e.currentTarget.dataset.id);
       if (st) printStation(st);
     });
+    $('#dShare')?.addEventListener('click', (e) => {
+      const st = ST_BY_ID.get(+e.currentTarget.dataset.id);
+      if (!st) return;
+      const phoneText = formatPhoneDisplay(st.phone) || 'ไม่มีข้อมูล';
+      const addrText = st.address || 'ไม่มีข้อมูล';
+      shareOrCopy({
+        title: `${st.name} — PS Locator`,
+        text: `${st.name} (${st.province_th})\nโทร: ${phoneText}\nที่อยู่: ${addrText}`,
+        url: stationShareUrl(st),
+      });
+    });
     $('#dSave')?.addEventListener('click', (e) => {
       const btn = e.currentTarget;
       const id = +btn.dataset.id;
@@ -2249,7 +2324,22 @@ if (isJurPage) {
   renderRegionChips();
   bindStationEvents();
 
-  if (state.q || state.province || state.region !== 'all' || state.page > 1 || state.sort !== 'region') {
+  if (pendingStationId !== null) {
+    const deepSt = ST_BY_ID.get(pendingStationId);
+    pendingStationId = null;
+    if (deepSt) {
+      setResultsState(true);
+      if ($('#searchInput')?.value) $('#searchHub')?.classList.add('has-value');
+      const list = getFiltered();
+      const idx = list.findIndex(s => s.id === deepSt.id);
+      if (idx >= 0) {
+        state.page = Math.floor(idx / PER_PAGE) + 1;
+      }
+      selected = deepSt;
+      renderResults();
+      openStationModal(deepSt.id);
+    }
+  } else if (state.q || state.province || state.region !== 'all' || state.page > 1 || state.sort !== 'region') {
     setResultsState(true);
     if ($('#searchInput')?.value) $('#searchHub')?.classList.add('has-value');
     renderResults();
