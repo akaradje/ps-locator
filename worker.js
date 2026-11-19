@@ -328,7 +328,7 @@ async function buildDynamicMeta(request, env, url) {
     return {
       title: `ตรวจเขตอำนาจสอบสวน: ${jParam} | PS Locator`,
       description: `ตรวจสอบ สภ./สน. ผู้รับผิดชอบสำหรับ “${jParam}” จากประกาศสำนักงานตำรวจแห่งชาติ (โปรดยืนยันกับประกาศฉบับจริงและสถานีต้นทางก่อนดำเนินการทางกฎหมาย)`,
-      ogImage: `${url.origin}/og?j=${encodeURIComponent(jParam)}`,
+      ogImage: `${url.origin}/assets/og-jurisdiction-v2.png?v=2`,
       ogUrl: url.toString(),
     };
   }
@@ -344,7 +344,7 @@ async function buildDynamicMeta(request, env, url) {
       return {
         title: `${st.name} (${st.province_th}) | PS Locator`,
         description: `ที่อยู่: ${addr} · โทรศัพท์: ${phone}${region ? ' · ' + region : ''}`,
-        ogImage: `${url.origin}/og?id=${encodeURIComponent(st.id)}`,
+        ogImage: `${url.origin}/assets/og-cover-v2.png?v=2`,
         ogUrl: url.toString(),
       };
     }
@@ -352,7 +352,7 @@ async function buildDynamicMeta(request, env, url) {
       return {
         title: `ค้นหา “${qParam}” — สารบบสถานีตำรวจทั่วประเทศ | PS Locator`,
         description: `ผลการค้นหาสถานีตำรวจสำหรับ “${qParam}” จากฐานข้อมูล 1,484 แห่ง 77 จังหวัด`,
-        ogImage: `${url.origin}/og?q=${encodeURIComponent(qParam)}`,
+        ogImage: `${url.origin}/assets/og-cover-v2.png?v=2`,
         ogUrl: url.toString(),
       };
     }
@@ -939,7 +939,7 @@ function renderSsrLayout({
   const safeTitle = escapeXml(title);
   const safeDesc = escapeXml(description);
   const safeCanonical = escapeXml(canonical);
-  const safeOgImage = escapeXml(ogImage || `${SITE_ORIGIN}/assets/ps-locator-poster.png`);
+  const safeOgImage = escapeXml(ogImage || `${SITE_ORIGIN}/assets/og-cover-v2.png?v=2`);
   const safeRobots = escapeXml(robots);
   const jsonLdScript = jsonLd
     ? `<script type="application/ld+json">${safeJsonLd(jsonLd)}</script>`
@@ -971,6 +971,9 @@ function renderSsrLayout({
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDesc}">
 <meta property="og:image" content="${safeOgImage}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${safeTitle}">
 <meta name="twitter:description" content="${safeDesc}">
@@ -1084,7 +1087,7 @@ async function handleStationPage(request, env, rawId) {
 
   const canonical = `${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`;
   const provinceUrl = `${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`;
-  const ogImage = `${SITE_ORIGIN}/og?id=${encodeURIComponent(st.id)}`;
+  const ogImage = `${SITE_ORIGIN}/assets/og-cover-v2.png?v=2`;
 
   const title = `ที่อยู่ เบอร์โทร ${st.name} (${prov}) | PS Locator`;
   const description = `${st.name} จังหวัด${prov} สังกัด${regionFull} · ที่อยู่: ${addrDisplay} · โทรศัพท์: ${phoneDisplay} · พร้อมนำทาง Google Maps และพิมพ์แนบเอกสารคดี A4`;
