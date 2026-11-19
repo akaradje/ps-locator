@@ -1,13 +1,19 @@
 /* ============================================================
-   PS LOCATOR — Spatial Map Search + Nearest Police Stations + Jurisdiction Link
+   PS LOCATOR — Lazy WebGL Vector Map (MapLibre GL) + Smart Clustering
+                + Citizen SOS Mode + Nearest Police Stations + Jurisdiction
    Uses data/stations.js (read-only), lazy data/jurisdictions.js (read-only),
-   OSM Nominatim (geocoding/reverse), and Overpass API (nearby amenity=police)
+   lazy data/station-coords.json (read-only), OSM Nominatim, and MapLibre GL JS.
    ============================================================ */
 (function () {
   'use strict';
 
   const STATIONS = Array.isArray(window.STATIONS) ? window.STATIONS : [];
-  const ST_BY_ID = new Map(STATIONS.map(s => [s.id, s]));
+  const ST_BY_ID = new Map(STATIONS.map(function (s) { return [String(s.id), s]; }));
+
+  const MAPLIBRE_VERSION = '4.7.1';
+  const MAPLIBRE_CSS_URL = 'https://unpkg.com/maplibre-gl@' + MAPLIBRE_VERSION + '/dist/maplibre-gl.css';
+  const MAPLIBRE_JS_URL = 'https://unpkg.com/maplibre-gl@' + MAPLIBRE_VERSION + '/dist/maplibre-gl.js';
+  const GLYPHS_URL = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
 
   const htmlEl = document.documentElement;
   const bodyEl = document.body;
@@ -27,13 +33,19 @@
   const voiceBtn = document.getElementById('voice-btn');
   const gpsBtn = document.getElementById('gps-btn');
   const idleGpsBtn = document.getElementById('idleGpsBtn');
+  const idleSosBtn = document.getElementById('idleSosBtn');
+  const idleExploreMapBtn = document.getElementById('idleExploreMapBtn');
+  const sosBtn = document.getElementById('sosBtn');
   const inlineStatus = document.getElementById('inline-status');
 
   const resultsLabel = document.getElementById('results-label');
   const sourceBadge = document.getElementById('source-badge');
+  const sosPanel = document.getElementById('sosPanel');
   const mapJurBox = document.getElementById('mapJurBox');
   const nearbyStationsBox = document.getElementById('nearbyStationsBox');
+  const neighborStationsBox = document.getElementById('neighborStationsBox');
   const resultsList = document.getElementById('results-list');
+  const mapContainer = document.getElementById('locator-map');
   const activeCoordChip = document.getElementById('active-coord-chip');
   const activePlaceChip = document.getElementById('active-place-chip');
   const copyCoordBtn = document.getElementById('copy-coord-btn');
@@ -43,13 +55,40 @@
   let currentResults = [];
   let selectedItem = null;
   let mapInstance = null;
+  let mapReady = false;
+  let mapLibrePromise = null;
+  let mapInitPromise = null;
   let activeMarker = null;
-  let stationLayer = null;
+  let activePopup = null;
   let activeSearchController = null;
   let activeDetailController = null;
   let copyTimer = null;
+
   let jurData = window.JURISDICTION || null;
   let jurPromise = null;
+
+  /* Read-only verified coordinates registry + runtime OSM cache */
+  const STATION_COORDS = new Map();
+  const OSM_COORD_CACHE = new Map();
+  let coordsLoadPromise = null;
+  let osmCacheHydrated = false;
+  let currentNearbyFeatures = [];
+  let lastOriginCoords = null;
+
+  /* Citizen SOS Mode state */
+  let sosActive = false;
+  let sosState = {
+    status: 'idle',
+    statusText: '',
+    lat: null,
+    lon: null,
+    accuracy: null,
+    nearest: [],
+    hasCoords: false,
+    jurResult: null,
+    jurAreaLabel: '',
+    admin: null
+  };
 
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -82,6 +121,11 @@
     return String(raw).split(/[,;\/]/)[0].trim() || 'ไม่มีข้อมูล';
   }
 
+  function phoneDigits(raw) {
+    if (!raw) return '';
+    return String(raw).split(/[,;\/]/)[0].replace(/\D/g, '');
+  }
+
   function haversineKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -91,6 +135,14 @@
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function getTambonName(tb) {
+    return typeof tb === 'string' ? tb : (tb && (tb.name || tb.n)) || '';
+  }
+
+  function isTambonPartial(tb) {
+    return Boolean(tb && typeof tb === 'object' && (tb.partial || tb.p));
   }
 
   function loadJurisdiction() {
@@ -108,6 +160,101 @@
       document.head.appendChild(s);
     });
     return jurPromise;
+  }
+
+  /* ---------- Read-Only Station Coords + IndexedDB Cache ---------- */
+  function openCoordsIDB() {
+    return new Promise(function (resolve, reject) {
+      if (typeof indexedDB === 'undefined') { reject(new Error('No IDB')); return; }
+      try {
+        const req = indexedDB.open('ps-locator-db', 1);
+        req.onupgradeneeded = function (ev) {
+          try {
+            const db = ev.target.result;
+            if (!db.objectStoreNames.contains('stations')) db.createObjectStore('stations', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('jurisdictions')) db.createObjectStore('jurisdictions', { keyPath: 'key' });
+            if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+          } catch (_) {}
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error || new Error('IDB error')); };
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  function hydrateOsmCoordCache() {
+    if (osmCacheHydrated) return Promise.resolve();
+    osmCacheHydrated = true;
+    return openCoordsIDB().then(function (db) {
+      return new Promise(function (resolve) {
+        try {
+          const tx = db.transaction('meta', 'readonly');
+          const req = tx.objectStore('meta').get('osm_coords_cache');
+          req.onsuccess = function () {
+            const rec = req.result;
+            if (rec && rec.entries && typeof rec.entries === 'object') {
+              Object.keys(rec.entries).forEach(function (k) {
+                const v = rec.entries[k];
+                if (Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFinite(v[1])) {
+                  OSM_COORD_CACHE.set(String(k), [Number(v[0]), Number(v[1])]);
+                }
+              });
+            }
+            try { db.close(); } catch (_) {}
+            resolve();
+          };
+          req.onerror = function () { try { db.close(); } catch (_) {} resolve(); };
+        } catch (_) {
+          try { db.close(); } catch (_) {}
+          resolve();
+        }
+      });
+    }).catch(function () {});
+  }
+
+  function persistOsmCoordCache() {
+    if (!OSM_COORD_CACHE.size) return;
+    const entries = {};
+    let count = 0;
+    OSM_COORD_CACHE.forEach(function (val, key) {
+      if (count < 200) { entries[key] = val; count++; }
+    });
+    openCoordsIDB().then(function (db) {
+      try {
+        const tx = db.transaction('meta', 'readwrite');
+        tx.objectStore('meta').put({ key: 'osm_coords_cache', entries: entries, updatedAt: Date.now() });
+        tx.oncomplete = function () { try { db.close(); } catch (_) {} };
+        tx.onerror = function () { try { db.close(); } catch (_) {} };
+      } catch (_) {
+        try { db.close(); } catch (_) {}
+      }
+    }).catch(function () {});
+  }
+
+  function loadStationCoords() {
+    if (coordsLoadPromise) return coordsLoadPromise;
+    coordsLoadPromise = Promise.all([
+      hydrateOsmCoordCache(),
+      fetch('./data/station-coords.json')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (data && data.coords && typeof data.coords === 'object') {
+            Object.keys(data.coords).forEach(function (id) {
+              const pair = data.coords[id];
+              if (Array.isArray(pair) && pair.length >= 2 && isFinite(pair[0]) && isFinite(pair[1])) {
+                STATION_COORDS.set(String(id), [Number(pair[0]), Number(pair[1])]);
+              }
+            });
+          }
+        })
+        .catch(function () {})
+    ]).then(function () {
+      refreshStationClusterSource();
+      return STATION_COORDS;
+    });
+    return coordsLoadPromise;
   }
 
   /* Match an OSM police POI name against official STATIONS */
@@ -242,7 +389,7 @@
   /* =====================================================================
      2. Capsule Spotlight & 3D Micro-Parallax
   ===================================================================== */
-  if (!reduceMotion) {
+  if (!reduceMotion && searchCapsule && capsuleTilt) {
     window.addEventListener('pointermove', function (e) {
       pointer.x = e.clientX; pointer.y = e.clientY; pointer.active = true;
       const rect = searchCapsule.getBoundingClientRect();
@@ -264,8 +411,37 @@
   }
 
   /* =====================================================================
-     3. Theme Toggle (synced with ps:theme)
+     3. Theme Toggle (synced with ps:theme + MapLibre Dual Theme)
   ===================================================================== */
+  function syncMapTheme(theme) {
+    if (!mapInstance || !mapReady) return;
+    const isLight = theme === 'light';
+    try {
+      if (mapInstance.getLayer('bg-layer')) {
+        mapInstance.setPaintProperty('bg-layer', 'background-color', isLight ? '#f1f5f9' : '#0b101b');
+      }
+      if (mapInstance.getLayer('osm-tiles')) {
+        mapInstance.setPaintProperty('osm-tiles', 'raster-saturation', isLight ? -0.15 : -0.35);
+        mapInstance.setPaintProperty('osm-tiles', 'raster-brightness-min', isLight ? 0 : 0.05);
+        mapInstance.setPaintProperty('osm-tiles', 'raster-brightness-max', isLight ? 1 : 0.88);
+        mapInstance.setPaintProperty('osm-tiles', 'raster-contrast', isLight ? 0 : 0.12);
+      }
+      if (mapInstance.getLayer('clusters')) {
+        mapInstance.setPaintProperty('clusters', 'circle-color', [
+          'step', ['get', 'point_count'],
+          isLight ? '#0284c7' : '#38bdf8',
+          10, isLight ? '#4f46e5' : '#818cf8',
+          30, isLight ? '#d97706' : '#f59e0b'
+        ]);
+        mapInstance.setPaintProperty('clusters', 'circle-stroke-color', isLight ? '#ffffff' : '#0f172a');
+      }
+      if (mapInstance.getLayer('unclustered-point')) {
+        mapInstance.setPaintProperty('unclustered-point', 'circle-color', isLight ? '#d97706' : '#f59e0b');
+        mapInstance.setPaintProperty('unclustered-point', 'circle-stroke-color', '#ffffff');
+      }
+    } catch (_) {}
+  }
+
   function applyTheme(theme) {
     const t = theme === 'light' ? 'light' : 'dark';
     htmlEl.dataset.theme = t;
@@ -275,14 +451,17 @@
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = t === 'light' ? '#f7f9fc' : '#05070c';
     if (reduceMotion) drawStaticField();
+    syncMapTheme(t);
   }
   applyTheme(htmlEl.dataset.theme || 'dark');
-  themeToggle.addEventListener('click', function () {
-    const nextTheme = htmlEl.dataset.theme === 'dark' ? 'light' : 'dark';
-    try { localStorage.setItem('ps:theme', nextTheme); } catch (_) {}
-    applyTheme(nextTheme);
-    emitCapsulePulse(0.75, 500);
-  });
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function () {
+      const nextTheme = htmlEl.dataset.theme === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('ps:theme', nextTheme); } catch (_) {}
+      applyTheme(nextTheme);
+      emitCapsulePulse(0.75, 500);
+    });
+  }
 
   /* =====================================================================
      4. Input Micro-Interactions & Shortcuts
@@ -295,7 +474,11 @@
     if (e.key === '/' && document.activeElement !== searchInput) {
       e.preventDefault(); searchInput.focus(); emitCapsulePulse(0.6, 360);
     } else if (e.key === 'Escape') {
-      if (bodyEl.classList.contains('has-results') || searchInput.value) resetToMinimalHome();
+      if (sosActive) {
+        deactivateSOSMode();
+      } else if (bodyEl.classList.contains('has-results') || searchInput.value) {
+        resetToMinimalHome();
+      }
     }
   });
 
@@ -307,40 +490,451 @@
   function resetToMinimalHome() {
     if (activeSearchController) { activeSearchController.abort(); activeSearchController = null; }
     if (activeDetailController) { activeDetailController.abort(); activeDetailController = null; }
-    bodyEl.classList.remove('is-scanning', 'has-results');
+    sosActive = false;
+    bodyEl.classList.remove('is-scanning', 'has-results', 'is-sos-mode');
+    if (sosBtn) sosBtn.setAttribute('aria-pressed', 'false');
     searchInput.value = '';
     syncInputState();
     showStatus('');
     currentResults = [];
     selectedItem = null;
+    currentNearbyFeatures = [];
+    lastOriginCoords = null;
     resultsList.innerHTML = '';
+    if (sosPanel) { sosPanel.innerHTML = ''; sosPanel.hidden = true; }
     if (mapJurBox) { mapJurBox.innerHTML = ''; mapJurBox.hidden = true; }
     if (nearbyStationsBox) { nearbyStationsBox.innerHTML = ''; nearbyStationsBox.hidden = true; }
-    if (stationLayer) stationLayer.clearLayers();
+    if (neighborStationsBox) { neighborStationsBox.innerHTML = ''; neighborStationsBox.hidden = true; }
+    if (activePopup) { try { activePopup.remove(); } catch (_) {} activePopup = null; }
+    if (activeMarker) { try { activeMarker.remove(); } catch (_) {} activeMarker = null; }
+    refreshStationClusterSource();
     if (openGmapsBtn) openGmapsBtn.hidden = true;
     emitCapsulePulse(0.8, 520);
     searchInput.focus();
   }
-  clearBtn.addEventListener('click', resetToMinimalHome);
+  if (clearBtn) clearBtn.addEventListener('click', resetToMinimalHome);
 
   /* =====================================================================
-     5. Leaflet Spatial Map + Station Markers
+     5. Dynamic Lazy-Loaded MapLibre GL JS (WebGL + Smart Clustering + Fallback)
   ===================================================================== */
-  function ensureMapInitialized() {
-    if (mapInstance || typeof window.L === 'undefined') return;
-    mapInstance = window.L.map('locator-map', { zoomControl: false, attributionControl: false }).setView([13.7563, 100.5018], 13);
-    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapInstance);
-    window.L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
-    stationLayer = window.L.layerGroup().addTo(mapInstance);
-
-    mapInstance.on('click', function (ev) {
-      const coordStr = ev.latlng.lat.toFixed(5) + ', ' + ev.latlng.lng.toFixed(5);
-      searchInput.value = coordStr;
-      syncInputState();
-      executeSearch(coordStr);
-    });
+  function isWebGLSupported() {
+    try {
+      const testCanvas = document.createElement('canvas');
+      if (!testCanvas) return false;
+      const gl =
+        testCanvas.getContext('webgl2') ||
+        testCanvas.getContext('webgl') ||
+        testCanvas.getContext('experimental-webgl');
+      return Boolean(gl);
+    } catch (_) {
+      return false;
+    }
   }
 
+  function showMapFallback(reasonText) {
+    if (!mapContainer) return;
+    if (sourceBadge) sourceBadge.textContent = 'FALLBACK · LIST';
+    const msg = reasonText ||
+      'ไม่สามารถโหลดแผนที่ WebGL (ออฟไลน์หรือไม่รองรับ WebGL) — ยังสามารถดูรายการ สภ.ใกล้เคียง โทรออก และนำทาง Google Maps ได้ด้านซ้าย';
+    mapContainer.innerHTML =
+      '<div class="map-fallback-box" role="status">' +
+        '<div class="map-fallback-icon" aria-hidden="true">' +
+          '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+            '<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>' +
+            '<line x1="8" y1="2" x2="8" y2="18"></line>' +
+            '<line x1="16" y1="6" x2="16" y2="22"></line>' +
+          '</svg>' +
+        '</div>' +
+        '<p class="map-fallback-title">โหมดแสดงผลสำรอง (ไม่ใช้แผนที่ WebGL)</p>' +
+        '<p class="map-fallback-desc">' + esc(msg) + '</p>' +
+        '<button type="button" class="map-mini-btn map-mini-primary" id="retryMapBtn">ลองโหลดแผนที่อีกครั้ง</button>' +
+      '</div>';
+    const retryBtn = mapContainer.querySelector('#retryMapBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', function () {
+        mapLibrePromise = null;
+        mapInitPromise = null;
+        mapInstance = null;
+        mapReady = false;
+        mapContainer.innerHTML = '';
+        ensureMapInitialized().then(function (m) {
+          if (m && lastOriginCoords) {
+            setMapActivePin(lastOriginCoords.lat, lastOriginCoords.lon, sosActive);
+            flyMapTo(lastOriginCoords.lat, lastOriginCoords.lon, 14);
+          }
+        });
+      });
+    }
+  }
+
+  function loadMapLibre() {
+    if (!isWebGLSupported()) {
+      return Promise.reject(Object.assign(new Error('WebGL unsupported'), { code: 'NO_WEBGL' }));
+    }
+    if (window.maplibregl) return Promise.resolve(window.maplibregl);
+    if (mapLibrePromise) return mapLibrePromise;
+
+    mapLibrePromise = new Promise(function (resolve, reject) {
+      if (!document.querySelector('link[data-ps-maplibre="css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = MAPLIBRE_CSS_URL;
+        link.setAttribute('data-ps-maplibre', 'css');
+        document.head.appendChild(link);
+      }
+
+      const script = document.createElement('script');
+      script.src = MAPLIBRE_JS_URL;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.setAttribute('data-ps-maplibre', 'js');
+
+      const timer = setTimeout(function () {
+        mapLibrePromise = null;
+        reject(Object.assign(new Error('MapLibre CDN timeout'), { code: 'CDN_TIMEOUT' }));
+      }, 12000);
+
+      script.onload = function () {
+        clearTimeout(timer);
+        if (window.maplibregl) resolve(window.maplibregl);
+        else {
+          mapLibrePromise = null;
+          reject(Object.assign(new Error('MapLibre missing after load'), { code: 'LOAD_ERROR' }));
+        }
+      };
+      script.onerror = function () {
+        clearTimeout(timer);
+        mapLibrePromise = null;
+        reject(Object.assign(new Error('Failed to load MapLibre CDN'), { code: 'CDN_ERROR' }));
+      };
+      document.head.appendChild(script);
+    });
+    return mapLibrePromise;
+  }
+
+  function buildMapStyle(theme) {
+    const isLight = theme === 'light';
+    return {
+      version: 8,
+      glyphs: GLYPHS_URL,
+      sources: {
+        'osm-raster': {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: '© OpenStreetMap'
+        }
+      },
+      layers: [
+        {
+          id: 'bg-layer',
+          type: 'background',
+          paint: { 'background-color': isLight ? '#f1f5f9' : '#0b101b' }
+        },
+        {
+          id: 'osm-tiles',
+          type: 'raster',
+          source: 'osm-raster',
+          paint: {
+            'raster-saturation': isLight ? -0.15 : -0.35,
+            'raster-brightness-min': isLight ? 0 : 0.05,
+            'raster-brightness-max': isLight ? 1 : 0.88,
+            'raster-contrast': isLight ? 0 : 0.12
+          }
+        }
+      ]
+    };
+  }
+
+  function buildStationsGeoJSON() {
+    const features = [];
+    const seen = new Set();
+
+    function pushFeature(id, name, province, phone, lat, lon, distKm) {
+      const key = id ? 'id:' + id : 'n:' + normStation(name) + ':' + lat.toFixed(4) + ',' + lon.toFixed(4);
+      if (seen.has(key)) return;
+      seen.add(key);
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: {
+          id: id || '',
+          name: name || 'สถานีตำรวจ',
+          province: province || '',
+          phone: phone || '',
+          distKm: typeof distKm === 'number' && isFinite(distKm) ? Number(distKm.toFixed(2)) : -1
+        }
+      });
+    }
+
+    /* 1. Nearby / active search station pins (with real distances) */
+    for (let i = 0; i < currentNearbyFeatures.length; i++) {
+      const it = currentNearbyFeatures[i];
+      if (!isFinite(it.lat) || !isFinite(it.lon)) continue;
+      const st = it.official;
+      pushFeature(
+        st ? String(st.id) : '',
+        it.name,
+        st ? st.province_th : '',
+        st && st.phone ? st.phone : '',
+        it.lat,
+        it.lon,
+        it.distKm
+      );
+    }
+
+    /* 2. Verified read-only coordinate registry (data/station-coords.json) */
+    STATION_COORDS.forEach(function (pair, id) {
+      const st = ST_BY_ID.get(String(id));
+      if (!st) return;
+      const dist = lastOriginCoords
+        ? haversineKm(lastOriginCoords.lat, lastOriginCoords.lon, pair[0], pair[1])
+        : -1;
+      pushFeature(String(st.id), st.name, st.province_th, st.phone || '', pair[0], pair[1], dist);
+    });
+
+    /* 3. Cached OSM coordinates discovered during this session / IDB */
+    OSM_COORD_CACHE.forEach(function (pair, id) {
+      const st = ST_BY_ID.get(String(id));
+      if (!st) return;
+      const dist = lastOriginCoords
+        ? haversineKm(lastOriginCoords.lat, lastOriginCoords.lon, pair[0], pair[1])
+        : -1;
+      pushFeature(String(st.id), st.name, st.province_th, st.phone || '', pair[0], pair[1], dist);
+    });
+
+    return { type: 'FeatureCollection', features: features };
+  }
+
+  function refreshStationClusterSource() {
+    if (!mapInstance || !mapReady) return;
+    try {
+      const src = mapInstance.getSource('stations-source');
+      if (src) src.setData(buildStationsGeoJSON());
+    } catch (_) {}
+  }
+
+  function buildStationPopupHTML(props, lat, lon) {
+    const name = props.name || 'สถานีตำรวจ';
+    const province = props.province || '';
+    const rawPhone = props.phone || '';
+    const phoneDisplay = formatPhone(rawPhone);
+    const digits = phoneDigits(rawPhone);
+    const dist = Number(props.distKm);
+    const distHtml = isFinite(dist) && dist >= 0
+      ? '<span class="map-popup-dist">ห่าง ' + dist.toFixed(1) + ' กม.</span>'
+      : '';
+    const navUrl = lastOriginCoords
+      ? 'https://www.google.com/maps/dir/?api=1&origin=' +
+          encodeURIComponent(lastOriginCoords.lat.toFixed(5) + ',' + lastOriginCoords.lon.toFixed(5)) +
+          '&destination=' + encodeURIComponent(lat.toFixed(5) + ',' + lon.toFixed(5))
+      : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat.toFixed(5) + ',' + lon.toFixed(5));
+
+    return (
+      '<div class="map-popup-card">' +
+        '<div class="map-popup-head">' +
+          '<strong>' + esc(name) + '</strong>' +
+          distHtml +
+        '</div>' +
+        (province ? '<div class="map-popup-meta">จังหวัด' + esc(province) + '</div>' : '') +
+        '<div class="map-popup-meta">โทร: ' + esc(phoneDisplay) + '</div>' +
+        '<div class="map-popup-actions">' +
+          (digits ? '<a class="map-mini-btn map-mini-primary" href="tel:' + esc(digits) + '">โทร</a>' : '') +
+          '<a class="map-mini-btn" href="' + esc(navUrl) + '" target="_blank" rel="noopener">นำทาง Google Maps</a>' +
+          '<a class="map-mini-btn" href="index.html?q=' + encodeURIComponent(name) + '">ดูรายละเอียด</a>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function openStationPopup(lat, lon, props) {
+    if (!mapInstance || !window.maplibregl) return;
+    if (activePopup) { try { activePopup.remove(); } catch (_) {} }
+    activePopup = new window.maplibregl.Popup({ closeButton: true, maxWidth: '280px', offset: 12 })
+      .setLngLat([lon, lat])
+      .setHTML(buildStationPopupHTML(props, lat, lon))
+      .addTo(mapInstance);
+  }
+
+  function ensureMapInitialized() {
+    if (mapInstance && mapReady) return Promise.resolve(mapInstance);
+    if (mapInitPromise) return mapInitPromise;
+
+    loadStationCoords();
+
+    mapInitPromise = loadMapLibre()
+      .then(function (maplibregl) {
+        if (!mapContainer) return null;
+        mapContainer.innerHTML = '';
+        const theme = htmlEl.dataset.theme || 'dark';
+        const isLight = theme === 'light';
+
+        const map = new maplibregl.Map({
+          container: 'locator-map',
+          style: buildMapStyle(theme),
+          center: [100.5018, 13.7563],
+          zoom: 12,
+          attributionControl: false
+        });
+
+        map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
+        mapInstance = map;
+
+        return new Promise(function (resolve) {
+          map.on('load', function () {
+            mapReady = true;
+            if (sourceBadge) sourceBadge.textContent = 'WEBGL · OSM';
+
+            map.addSource('stations-source', {
+              type: 'geojson',
+              data: buildStationsGeoJSON(),
+              cluster: true,
+              clusterMaxZoom: 12,
+              clusterRadius: 48
+            });
+
+            map.addLayer({
+              id: 'clusters',
+              type: 'circle',
+              source: 'stations-source',
+              filter: ['has', 'point_count'],
+              paint: {
+                'circle-color': [
+                  'step', ['get', 'point_count'],
+                  isLight ? '#0284c7' : '#38bdf8',
+                  10, isLight ? '#4f46e5' : '#818cf8',
+                  30, isLight ? '#d97706' : '#f59e0b'
+                ],
+                'circle-radius': [
+                  'step', ['get', 'point_count'],
+                  18, 10, 23, 30, 28
+                ],
+                'circle-stroke-width': 2.5,
+                'circle-stroke-color': isLight ? '#ffffff' : '#0f172a'
+              }
+            });
+
+            map.addLayer({
+              id: 'cluster-count',
+              type: 'symbol',
+              source: 'stations-source',
+              filter: ['has', 'point_count'],
+              layout: {
+                'text-field': ['get', 'point_count_abbreviated'],
+                'text-font': ['Open Sans Regular'],
+                'text-size': 12
+              },
+              paint: {
+                'text-color': '#ffffff'
+              }
+            });
+
+            map.addLayer({
+              id: 'unclustered-point',
+              type: 'circle',
+              source: 'stations-source',
+              filter: ['!', ['has', 'point_count']],
+              paint: {
+                'circle-color': isLight ? '#d97706' : '#f59e0b',
+                'circle-radius': 7.5,
+                'circle-stroke-width': 2.5,
+                'circle-stroke-color': '#ffffff'
+              }
+            });
+
+            /* Click cluster -> smooth zoom expansion */
+            map.on('click', 'clusters', function (ev) {
+              const features = map.queryRenderedFeatures(ev.point, { layers: ['clusters'] });
+              if (!features || !features.length) return;
+              const clusterId = features[0].properties.cluster_id;
+              const coords = features[0].geometry.coordinates;
+              const src = map.getSource('stations-source');
+              if (!src || !src.getClusterExpansionZoom) return;
+              const zoomRes = src.getClusterExpansionZoom(clusterId);
+              if (zoomRes && typeof zoomRes.then === 'function') {
+                zoomRes.then(function (zoom) {
+                  map.easeTo({ center: coords, zoom: zoom, duration: reduceMotion ? 0 : 450 });
+                }).catch(function () {});
+              }
+            });
+
+            /* Click unclustered station pin -> show official info popup */
+            map.on('click', 'unclustered-point', function (ev) {
+              const feat = ev.features && ev.features[0];
+              if (!feat) return;
+              const coords = feat.geometry.coordinates.slice();
+              openStationPopup(coords[1], coords[0], feat.properties || {});
+            });
+
+            map.on('mouseenter', 'clusters', function () { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'clusters', function () { map.getCanvas().style.cursor = ''; });
+            map.on('mouseenter', 'unclustered-point', function () { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'unclustered-point', function () { map.getCanvas().style.cursor = ''; });
+
+            /* Click empty map area -> lock coordinate & inspect jurisdiction */
+            map.on('click', function (ev) {
+              const hit = map.queryRenderedFeatures(ev.point, { layers: ['clusters', 'unclustered-point'] });
+              if (hit && hit.length) return;
+              const coordStr = ev.lngLat.lat.toFixed(5) + ', ' + ev.lngLat.lng.toFixed(5);
+              searchInput.value = coordStr;
+              syncInputState();
+              executeSearch(coordStr);
+            });
+
+            syncMapTheme(htmlEl.dataset.theme || 'dark');
+            refreshStationClusterSource();
+            resolve(map);
+          });
+
+          map.on('error', function () {
+            /* Keep map running even if a single tile fails offline */
+          });
+        });
+      })
+      .catch(function (err) {
+        mapInitPromise = null;
+        mapInstance = null;
+        mapReady = false;
+        const isNoWebGL = err && err.code === 'NO_WEBGL';
+        const reason = isNoWebGL
+          ? 'อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับ WebGL — ยังสามารถดูรายการ สภ.ใกล้เคียง โทรออก และนำทาง Google Maps ได้ด้านซ้าย'
+          : 'ไม่สามารถโหลดแผนที่ WebGL (ออฟไลน์หรือเชื่อมต่อ CDN ไม่สำเร็จ) — ยังสามารถดูรายการ สภ.ใกล้เคียง โทรออก และนำทาง Google Maps ได้ด้านซ้าย';
+        showMapFallback(reason);
+        return null;
+      });
+
+    return mapInitPromise;
+  }
+
+  function setMapActivePin(lat, lon, isSos) {
+    if (!mapInstance || !mapReady || !window.maplibregl) return;
+    try {
+      if (activeMarker) { activeMarker.remove(); activeMarker = null; }
+      const el = document.createElement('div');
+      el.className = isSos ? 'ps-pin ps-pin-sos' : 'ps-pin';
+      el.setAttribute('aria-label', isSos ? 'ตำแหน่งฉุกเฉินปัจจุบันของคุณ' : 'ตำแหน่งที่เลือก');
+      activeMarker = new window.maplibregl.Marker({ element: el })
+        .setLngLat([lon, lat])
+        .addTo(mapInstance);
+    } catch (_) {}
+  }
+
+  function flyMapTo(lat, lon, zoom) {
+    if (!mapInstance || !mapReady) return;
+    try {
+      mapInstance.resize();
+      if (reduceMotion) {
+        mapInstance.jumpTo({ center: [lon, lat], zoom: zoom || 14 });
+      } else {
+        mapInstance.flyTo({ center: [lon, lat], zoom: zoom || 14, duration: 850 });
+      }
+    } catch (_) {}
+  }
+
+  /* =====================================================================
+     6. Admin / Jurisdiction Lookup + Neighbor Police Network
+  ===================================================================== */
   function extractAdminFromAddress(addr, displayName) {
     const a = addr || {};
     const rawProv = a.province || a.state || '';
@@ -356,23 +950,19 @@
       const explicitTambon = /^(ตำบล|ต\.|แขวง)/.test(raw);
       const cleaned = normAdmin(raw);
       if (!cleaned) return;
-      /* ตำบลที่เป็นชื่อเดียวกับจังหวัด (เช่น ต.ประจวบคีรีขันธ์, ต.ชุมพร) ต้องเก็บไว้ด้วยเมื่อระบุชัดเจน */
       if (!allowSameAsProv && !explicitTambon && cleaned === province) return;
       if (tambons.indexOf(cleaned) === -1) tambons.push(cleaned);
     };
-    /* ให้ความสำคัญสูงสุดกับคำหลัง "ตำบล" หรือ "แขวง" ใน display_name */
     if (displayName) {
       const matches = displayName.matchAll(/(?:ตำบล|แขวง)\s*([^\s,]+)/g);
       for (const m of matches) {
         if (m[1]) pushTambon(m[1], true);
       }
     }
-    /* ใน OSM ประเทศไทย ชื่อตำบลมักอยู่ใน suburb, city, town หรือ municipality */
     const primaryFields = [a.suburb, a.quarter, a.city, a.town, a.municipality, a.city_district];
     for (let i = 0; i < primaryFields.length; i++) {
       pushTambon(primaryFields[i], false);
     }
-    /* หมู่บ้าน (village/hamlet) ไว้ลำดับท้ายสุดเพื่อไม่ให้ทับชื่อตำบลจริง */
     const secondaryFields = [a.neighbourhood, a.village, a.hamlet];
     for (let i = 0; i < secondaryFields.length; i++) {
       pushTambon(secondaryFields[i], false);
@@ -396,18 +986,16 @@
       const t = admin.tambons[i];
       const idxList = jurData.index[t];
       if (!idxList || !idxList.length) continue;
-      /* ห้ามข้ามจังหวัดเมื่อทราบจังหวัดแล้ว เพื่อป้องกันชื่อตำบลซ้ำกันข้ามจังหวัด */
       let recs = idxList.map(function (idx) { return jurData.stations[idx]; }).filter(function (rec) {
         return rec && byProv(rec);
       });
       if (!recs.length) continue;
       const ampRecs = recs.filter(byAmphoe);
       if (ampRecs.length) recs = ampRecs;
-      /* ถ้ามีทั้งสถานีที่ครอบคลุมเต็มตำบลและสถานีที่รับเฉพาะบางส่วน ให้เรียงเต็มตำบลขึ้นก่อน */
       if (recs.length > 1) {
         const isFull = function (rec) {
-          const tb = rec.tambons.find(function (x) { return normAdmin(typeof x === 'string' ? x : x.n) === t; });
-          return tb && (typeof tb === 'string' || !tb.p);
+          const tb = rec.tambons.find(function (x) { return normAdmin(getTambonName(x)) === t; });
+          return tb && !isTambonPartial(tb);
         };
         const fullOnly = recs.filter(isFull);
         if (fullOnly.length === 1) recs = fullOnly;
@@ -415,29 +1003,122 @@
       return { matchedTambon: t, recs: recs };
     }
 
-    /* ถ้าไม่พบชื่อตำบลตรง ให้จับคู่เฉพาะสถานีหลักของอำเภอ+จังหวัดเดียวกัน (ไม่แสดงซ้ำหลาย สภ.) */
     if (admin.amphoe && admin.province) {
       const recs = jurData.stations.filter(function (rec) { return byProv(rec) && byAmphoe(rec); });
       if (recs.length) {
-        const mainRec = recs.find(function (r) { return normAdmin(r.short) === admin.amphoe || normAdmin(r.short) === 'เมือง' + admin.province; }) || recs[0];
+        const mainRec = recs.find(function (r) {
+          return normAdmin(r.short) === admin.amphoe || normAdmin(r.short) === 'เมือง' + admin.province;
+        }) || recs[0];
         return { matchedTambon: admin.amphoe, recs: [mainRec], byAmphoeOnly: true };
       }
     }
     return { matchedTambon: admin.tambons[0] || '', recs: [] };
   }
 
+  function buildJurisdictionWarnings(rec, matchedTambon, byAmphoeOnly) {
+    const warnParts = [];
+    const matchedT = rec.tambons.find(function (tb) {
+      return normAdmin(getTambonName(tb)) === matchedTambon;
+    });
+    const isPartial = isTambonPartial(matchedT);
+    const partialCount = rec.tambons.filter(isTambonPartial).length;
+    const missing = (typeof rec.count === 'number' ? rec.count : rec.tambons.length) - rec.tambons.length;
+
+    if (isPartial) {
+      warnParts.push('ตำบลนี้เป็นเขตบางส่วน / เฉพาะหมู่ที่ / แนวเขต (หน้า ' + rec.page + ')');
+    } else if (partialCount > 0) {
+      warnParts.push('สถานีนี้มี ' + partialCount + ' ตำบลที่เป็นเขตบางส่วน/เฉพาะหมู่ที่/แนวเขต');
+    }
+    if (missing > 0 || rec.verify) {
+      warnParts.push('โปรดตรวจสอบ: ประกาศระบุ ' + rec.count + ' ตำบล ถอดชื่อได้ ' + rec.tambons.length + ' ตำบล (1 ใน 4 สถานีถอดไม่ครบ)');
+    }
+    if (byAmphoeOnly) {
+      warnParts.push('จับคู่จากระดับอำเภอ (ไม่พบชื่อตำบลตรง)');
+    }
+    return warnParts;
+  }
+
+  function renderNeighborStations(primaryRec, originLat, originLon) {
+    if (!neighborStationsBox) return;
+    if (!primaryRec || !jurData || !Array.isArray(jurData.stations)) {
+      neighborStationsBox.hidden = true;
+      neighborStationsBox.innerHTML = '';
+      return;
+    }
+
+    let list = [];
+    if (Array.isArray(primaryRec.neighbors) && primaryRec.neighbors.length) {
+      list = primaryRec.neighbors
+        .map(function (nid) {
+          return jurData.stations.find(function (r) { return String(r.id) === String(nid) || r.short === nid; });
+        })
+        .filter(Boolean);
+    }
+    if (!list.length) {
+      const all = jurData.stations;
+      list = all.filter(function (r) {
+        return r.id !== primaryRec.id && r.province === primaryRec.province && r.amphoe === primaryRec.amphoe;
+      });
+      if (list.length < 4) {
+        list = list.concat(all.filter(function (r) {
+          return r.id !== primaryRec.id && r.province === primaryRec.province && r.amphoe !== primaryRec.amphoe;
+        }));
+      }
+    }
+    list = list.slice(0, 6);
+
+    if (!list.length) {
+      neighborStationsBox.hidden = true;
+      neighborStationsBox.innerHTML = '';
+      return;
+    }
+
+    const cards = list.map(function (r) {
+      const st = ST_BY_ID.get(String(r.id));
+      const fullName = st ? st.name : 'สภ.' + r.short;
+      const phone = st && st.phone ? formatPhone(st.phone) : 'ไม่มีข้อมูล';
+      const digits = st && st.phone ? phoneDigits(st.phone) : '';
+      const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' +
+        encodeURIComponent(originLat.toFixed(5) + ',' + originLon.toFixed(5)) +
+        '&destination=' + encodeURIComponent(fullName + ' ' + r.province);
+      return (
+        '<div class="map-neighbor-card">' +
+          '<div class="map-jur-top">' +
+            '<strong>' + esc(fullName) + '</strong>' +
+            '<span class="map-badge">' + esc(r.amphoe ? 'อ.' + r.amphoe : 'จ.' + r.province) + '</span>' +
+          '</div>' +
+          '<div class="map-jur-sub">โทร ' + esc(phone) + '</div>' +
+          '<div class="map-card-actions">' +
+            (digits ? '<a class="map-mini-btn map-mini-primary" href="tel:' + esc(digits) + '">โทร</a>' : '') +
+            '<a class="map-mini-btn" href="' + esc(navUrl) + '" target="_blank" rel="noopener">นำทาง</a>' +
+            '<a class="map-mini-btn" href="jurisdiction.html?j=' + encodeURIComponent(r.short) + '&jtab=jur">เขตอำนาจ</a>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    neighborStationsBox.hidden = false;
+    neighborStationsBox.innerHTML =
+      '<div class="map-sec-head">' +
+        '<span>เครือข่ายสถานีตำรวจข้างเคียง</span>' +
+        '<small>จ.' + esc(primaryRec.province) + ' · ประสาน / ส่งหมาย</small>' +
+      '</div>' +
+      cards;
+  }
+
   function renderJurisdictionBox(admin, lat, lon) {
-    if (!mapJurBox) return;
+    if (!mapJurBox) return Promise.resolve(null);
     if (!admin.province && !admin.tambons.length) {
       mapJurBox.hidden = true;
       mapJurBox.innerHTML = '';
-      return;
+      if (neighborStationsBox) { neighborStationsBox.hidden = true; neighborStationsBox.innerHTML = ''; }
+      return Promise.resolve(null);
     }
 
     mapJurBox.hidden = false;
     mapJurBox.innerHTML = '<div class="map-sec-head"><span>เขตอำนาจสอบสวนของตำแหน่งนี้</span></div><div class="map-sec-loading">กำลังตรวจสอบเขตอำนาจสอบสวน…</div>';
 
-    loadJurisdiction().then(function () {
+    return loadJurisdiction().then(function () {
       const found = findJurisdictionForAdmin(admin);
       const displayTambon = found.recs.length && !found.byAmphoeOnly ? found.matchedTambon : admin.tambons[0];
       const areaLabel = [
@@ -448,23 +1129,17 @@
 
       if (found.recs.length) {
         const cards = found.recs.map(function (rec) {
-          const st = ST_BY_ID.get(rec.id);
+          const st = ST_BY_ID.get(String(rec.id));
           const fullName = st ? st.name : 'สภ.' + rec.short;
           const phone = st && st.phone ? formatPhone(st.phone) : 'ไม่มีข้อมูล';
-          const digits = st && st.phone ? String(st.phone).split(/[,;\/]/)[0].replace(/\D/g, '') : '';
-          const matchedT = rec.tambons.find(function (tb) {
-            const name = typeof tb === 'string' ? tb : tb.n;
-            return normAdmin(name) === found.matchedTambon;
-          });
-          const isPartial = matchedT && typeof matchedT === 'object' && matchedT.p;
-          const warnParts = [];
-          if (isPartial) warnParts.push('เขตบางส่วน/เฉพาะบางหมู่ที่');
-          if (rec.verify) warnParts.push('โปรดตรวจรายชื่อตำบลกับประกาศฉบับจริง');
-          if (found.byAmphoeOnly) warnParts.push('จับคู่จากระดับอำเภอ (ไม่พบชื่อตำบลตรง)');
+          const digits = st && st.phone ? phoneDigits(st.phone) : '';
+          const warnParts = buildJurisdictionWarnings(rec, found.matchedTambon, found.byAmphoeOnly);
           const warnHtml = warnParts.length
             ? '<div class="map-jur-warn">' + esc(warnParts.join(' · ')) + '</div>'
             : '';
-          const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' + encodeURIComponent(lat.toFixed(5) + ',' + lon.toFixed(5)) + '&destination=' + encodeURIComponent(fullName + ' ' + rec.province);
+          const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' +
+            encodeURIComponent(lat.toFixed(5) + ',' + lon.toFixed(5)) +
+            '&destination=' + encodeURIComponent(fullName + ' ' + rec.province);
           return (
             '<div class="map-jur-card">' +
               '<div class="map-jur-top">' +
@@ -489,6 +1164,8 @@
           '</div>' +
           cards +
           '<p class="map-jur-note">โปรดตรวจสอบประกาศราชกิจจานุเบกษาฉบับจริงก่อนนำไปใช้ทางกฎหมาย</p>';
+
+        renderNeighborStations(found.recs[0], lat, lon);
       } else if (admin.province === 'กรุงเทพมหานคร') {
         const bkkQuery = admin.tambons[0] || admin.amphoe || 'กรุงเทพ';
         mapJurBox.innerHTML =
@@ -503,6 +1180,7 @@
               '<a class="map-mini-btn" href="index.html?q=' + encodeURIComponent(bkkQuery) + '">ค้นในสารบบ สน.</a>' +
             '</div>' +
           '</div>';
+        if (neighborStationsBox) { neighborStationsBox.hidden = true; neighborStationsBox.innerHTML = ''; }
       } else {
         mapJurBox.innerHTML =
           '<div class="map-sec-head">' +
@@ -515,88 +1193,142 @@
               '<a class="map-mini-btn" href="jurisdiction.html?j=' + encodeURIComponent(admin.tambons[0] || admin.amphoe || admin.province) + '&jtab=jur">เปิดหน้าเขตอำนาจ</a>' +
             '</div>' +
           '</div>';
+        if (neighborStationsBox) { neighborStationsBox.hidden = true; neighborStationsBox.innerHTML = ''; }
       }
+
+      if (sosActive) {
+        sosState.jurResult = found;
+        sosState.jurAreaLabel = areaLabel;
+        sosState.admin = admin;
+        renderSOSPanel();
+      }
+      return { found: found, areaLabel: areaLabel };
     }).catch(function () {
       mapJurBox.hidden = true;
+      return null;
     });
   }
 
+  /* =====================================================================
+     7. Nearby Police Stations (Registry + OSM Cache + Nominatim + Offline Fallback)
+  ===================================================================== */
+  function collectLocalCoordCandidates(lat, lon) {
+    const items = [];
+    const seen = new Set();
+
+    function addFromMap(mapRef) {
+      mapRef.forEach(function (pair, id) {
+        if (seen.has(id)) return;
+        const st = ST_BY_ID.get(String(id));
+        if (!st) return;
+        const dist = haversineKm(lat, lon, pair[0], pair[1]);
+        if (dist <= 45) {
+          seen.add(id);
+          items.push({
+            name: st.name,
+            lat: pair[0],
+            lon: pair[1],
+            distKm: dist,
+            official: st
+          });
+        }
+      });
+    }
+    addFromMap(STATION_COORDS);
+    addFromMap(OSM_COORD_CACHE);
+    return items;
+  }
+
   function renderNearbyStations(lat, lon, admin, signal) {
-    if (!nearbyStationsBox) return;
+    if (!nearbyStationsBox) return Promise.resolve();
     nearbyStationsBox.hidden = false;
     nearbyStationsBox.innerHTML =
       '<div class="map-sec-head"><span>สภ./สน. ใกล้ตำแหน่งนี้</span><small>กำลังค้นหาสถานีตำรวจใกล้เคียง…</small></div>';
 
-    if (stationLayer) stationLayer.clearLayers();
+    return loadStationCoords().then(function () {
+      const localCandidates = collectLocalCoordCandidates(lat, lon);
 
-    /* ใช้ Nominatim viewbox (~18 กม.) เป็นแหล่งหลักที่เสถียรกว่า Overpass เพื่อหาสถานีตำรวจพร้อมพิกัดจริง */
-    const delta = 0.18;
-    const viewbox = [
-      (lon - delta).toFixed(4),
-      (lat + delta).toFixed(4),
-      (lon + delta).toFixed(4),
-      (lat - delta).toFixed(4)
-    ].join(',');
-    const nomUrl =
-      'https://nominatim.openstreetmap.org/search?format=json&accept-language=th,en&bounded=1&limit=12&viewbox=' +
-      encodeURIComponent(viewbox) +
-      '&q=' + encodeURIComponent('สถานีตำรวจ');
+      const delta = 0.18;
+      const viewbox = [
+        (lon - delta).toFixed(4),
+        (lat + delta).toFixed(4),
+        (lon + delta).toFixed(4),
+        (lat - delta).toFixed(4)
+      ].join(',');
+      const nomUrl =
+        'https://nominatim.openstreetmap.org/search?format=json&accept-language=th,en&bounded=1&limit=12&viewbox=' +
+        encodeURIComponent(viewbox) +
+        '&q=' + encodeURIComponent('สถานีตำรวจ');
 
-    fetch(nomUrl, { signal: signal })
-      .then(function (r) { if (!r.ok) throw new Error('Nominatim police lookup failed'); return r.json(); })
-      .then(function (list) {
-        const els = Array.isArray(list) ? list : [];
-        const seen = new Set();
-        const items = [];
-        for (let i = 0; i < els.length; i++) {
-          const el = els[i];
-          const pLat = Number(el.lat), pLon = Number(el.lon);
-          if (!isFinite(pLat) || !isFinite(pLon)) continue;
-          const rawName = el.name || (el.display_name ? el.display_name.split(',')[0] : '');
-          if (!rawName || el.class === 'highway' || /^(ซอย|ถนน|แยก|ป้ายรถ)/.test(rawName)) continue;
-          const official = matchOfficialStation(rawName, admin.province);
-          const displayName = official ? official.name : rawName;
-          const dedupKey = official ? 'id:' + official.id : 'n:' + normStation(rawName);
-          if (seen.has(dedupKey)) continue;
-          seen.add(dedupKey);
-          items.push({
-            name: displayName,
-            lat: pLat,
-            lon: pLon,
-            distKm: haversineKm(lat, lon, pLat, pLon),
-            official: official
-          });
-        }
-        items.sort(function (a, b) { return a.distKm - b.distKm; });
-        const top = items.slice(0, 6);
-        if (top.length) {
-          drawNearbyStationList(top, lat, lon, true);
-        } else {
-          drawFallbackAreaStations(admin, lat, lon);
-        }
-      })
-      .catch(function (err) {
-        if (err && err.name === 'AbortError') return;
-        drawFallbackAreaStations(admin, lat, lon);
-      });
+      return fetch(nomUrl, { signal: signal })
+        .then(function (r) { if (!r.ok) throw new Error('Nominatim police lookup failed'); return r.json(); })
+        .then(function (list) {
+          const els = Array.isArray(list) ? list : [];
+          const seen = new Set();
+          const items = [];
+          let addedToCache = false;
+
+          for (let i = 0; i < localCandidates.length; i++) {
+            const c = localCandidates[i];
+            const k = c.official ? 'id:' + c.official.id : 'n:' + normStation(c.name);
+            seen.add(k);
+            items.push(c);
+          }
+
+          for (let i = 0; i < els.length; i++) {
+            const el = els[i];
+            const pLat = Number(el.lat), pLon = Number(el.lon);
+            if (!isFinite(pLat) || !isFinite(pLon)) continue;
+            const rawName = el.name || (el.display_name ? el.display_name.split(',')[0] : '');
+            if (!rawName || el.class === 'highway' || /^(ซอย|ถนน|แยก|ป้ายรถ)/.test(rawName)) continue;
+            const official = matchOfficialStation(rawName, admin.province);
+            const displayName = official ? official.name : rawName;
+            const dedupKey = official ? 'id:' + official.id : 'n:' + normStation(rawName);
+            if (official && !STATION_COORDS.has(String(official.id)) && !OSM_COORD_CACHE.has(String(official.id))) {
+              OSM_COORD_CACHE.set(String(official.id), [pLat, pLon]);
+              addedToCache = true;
+            }
+            if (seen.has(dedupKey)) continue;
+            seen.add(dedupKey);
+            items.push({
+              name: displayName,
+              lat: pLat,
+              lon: pLon,
+              distKm: haversineKm(lat, lon, pLat, pLon),
+              official: official
+            });
+          }
+
+          if (addedToCache) persistOsmCoordCache();
+
+          items.sort(function (a, b) { return a.distKm - b.distKm; });
+          const top = items.slice(0, 6);
+          if (top.length) {
+            drawNearbyStationList(top, lat, lon, true);
+          } else {
+            drawFallbackAreaStations(admin, lat, lon);
+          }
+        })
+        .catch(function (err) {
+          if (err && err.name === 'AbortError') return;
+          if (localCandidates.length) {
+            localCandidates.sort(function (a, b) { return a.distKm - b.distKm; });
+            drawNearbyStationList(localCandidates.slice(0, 6), lat, lon, true);
+          } else {
+            drawFallbackAreaStations(admin, lat, lon);
+          }
+        });
+    });
   }
 
   function drawNearbyStationList(items, originLat, originLon, hasCoords) {
-    if (stationLayer && mapInstance && typeof window.L !== 'undefined' && hasCoords) {
-      stationLayer.clearLayers();
-      const stIcon = window.L.divIcon({
-        className: '',
-        html: '<div class="ps-station-pin" title="สถานีตำรวจ"></div>',
-        iconSize: [14, 14],
-        iconAnchor: [7, 7]
-      });
-      items.forEach(function (it) {
-        const phoneTxt = it.official && it.official.phone ? '<br>โทร ' + esc(formatPhone(it.official.phone)) : '';
-        const marker = window.L.marker([it.lat, it.lon], { icon: stIcon })
-          .bindPopup('<strong>' + esc(it.name) + '</strong><br>ห่าง ' + it.distKm.toFixed(1) + ' กม.' + phoneTxt);
-        marker.addTo(stationLayer);
-        it._marker = marker;
-      });
+    currentNearbyFeatures = hasCoords ? items : [];
+    refreshStationClusterSource();
+
+    if (sosActive) {
+      sosState.nearest = items.slice(0, 3);
+      sosState.hasCoords = hasCoords;
+      renderSOSPanel();
     }
 
     nearbyStationsBox.innerHTML =
@@ -610,12 +1342,14 @@
       card.className = 'map-station-card';
       const st = it.official;
       const phone = st && st.phone ? formatPhone(st.phone) : 'ไม่มีข้อมูล';
-      const digits = st && st.phone ? String(st.phone).split(/[,;\/]/)[0].replace(/\D/g, '') : '';
+      const digits = st && st.phone ? phoneDigits(st.phone) : '';
       const shortName = it.name.replace(/^สภ\.|^สน\./, '').trim();
       const navDest = hasCoords
         ? it.lat.toFixed(5) + ',' + it.lon.toFixed(5)
         : it.name + (st ? ' ' + st.province_th : '');
-      const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' + encodeURIComponent(originLat.toFixed(5) + ',' + originLon.toFixed(5)) + '&destination=' + encodeURIComponent(navDest);
+      const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' +
+        encodeURIComponent(originLat.toFixed(5) + ',' + originLon.toFixed(5)) +
+        '&destination=' + encodeURIComponent(navDest);
 
       card.innerHTML =
         '<div class="map-jur-top">' +
@@ -633,10 +1367,19 @@
         '</div>';
 
       const focusBtn = card.querySelector('.map-st-focus');
-      if (focusBtn && hasCoords && mapInstance) {
+      if (focusBtn && hasCoords) {
         focusBtn.addEventListener('click', function () {
-          mapInstance.flyTo([it.lat, it.lon], 16, { duration: reduceMotion ? 0 : 0.7 });
-          if (it._marker) it._marker.openPopup();
+          ensureMapInitialized().then(function (m) {
+            if (!m) return;
+            flyMapTo(it.lat, it.lon, 15.5);
+            openStationPopup(it.lat, it.lon, {
+              id: st ? String(st.id) : '',
+              name: it.name,
+              province: st ? st.province_th : '',
+              phone: st && st.phone ? st.phone : '',
+              distKm: it.distKm
+            });
+          });
         });
       }
       nearbyStationsBox.appendChild(card);
@@ -646,6 +1389,11 @@
   function drawFallbackAreaStations(admin, originLat, originLon) {
     if (!admin.province) {
       nearbyStationsBox.hidden = true;
+      if (sosActive) {
+        sosState.nearest = [];
+        sosState.hasCoords = false;
+        renderSOSPanel();
+      }
       return;
     }
     const provMatches = STATIONS.filter(function (s) {
@@ -708,6 +1456,7 @@
     selectedItem = item;
     const latNum = Number(item.lat);
     const lonNum = Number(item.lon);
+    lastOriginCoords = { lat: latNum, lon: lonNum };
     const coordFormatted = latNum.toFixed(5) + ', ' + lonNum.toFixed(5);
 
     activeCoordChip.textContent = 'LAT ' + latNum.toFixed(5) + ' · LON ' + lonNum.toFixed(5);
@@ -723,26 +1472,262 @@
       btn.classList.toggle('is-selected', currentResults[idx] === item);
     });
 
-    ensureMapInitialized();
-    if (mapInstance && typeof window.L !== 'undefined') {
+    ensureMapInitialized().then(function (m) {
+      if (!m) return;
       setTimeout(function () {
-        mapInstance.invalidateSize();
-        mapInstance.flyTo([latNum, lonNum], 14, { duration: reduceMotion ? 0 : 0.9 });
-        const pinIcon = window.L.divIcon({
-          className: '',
-          html: '<div class="ps-pin"></div>',
-          iconSize: [18, 18],
-          iconAnchor: [9, 9]
-        });
-        if (activeMarker) activeMarker.setLatLng([latNum, lonNum]);
-        else activeMarker = window.L.marker([latNum, lonNum], { icon: pinIcon }).addTo(mapInstance);
-      }, 80);
-    }
+        setMapActivePin(latNum, lonNum, sosActive);
+        flyMapTo(latNum, lonNum, 14);
+      }, 60);
+    });
 
     copyCoordBtn.dataset.coords = coordFormatted;
     enrichLocationContext(item, latNum, lonNum);
   }
 
+  /* =====================================================================
+     8. Citizen SOS Mode (โหมดเร่งด่วนสำหรับประชาชนและเจ้าหน้าที่ภาคสนาม)
+  ===================================================================== */
+  function renderSOSPanel() {
+    if (!sosPanel) return;
+    if (!sosActive) {
+      sosPanel.hidden = true;
+      sosPanel.innerHTML = '';
+      return;
+    }
+
+    sosPanel.hidden = false;
+    const hasPos = typeof sosState.lat === 'number' && typeof sosState.lon === 'number';
+    const coordStr = hasPos ? sosState.lat.toFixed(5) + ', ' + sosState.lon.toFixed(5) : '';
+    const accText = typeof sosState.accuracy === 'number' && isFinite(sosState.accuracy)
+      ? 'ความแม่นยำ ±' + Math.round(sosState.accuracy) + ' เมตร'
+      : '';
+
+    let coordHtml = '';
+    if (hasPos) {
+      coordHtml =
+        '<div class="sos-coord-row">' +
+          '<div>' +
+            '<div class="sos-coord-val mono">' + esc(coordStr) + '</div>' +
+            (accText ? '<div class="sos-coord-acc">' + esc(accText) + '</div>' : '') +
+          '</div>' +
+          '<button type="button" class="sos-copy-btn" id="sosCopyBtn" data-coords="' + esc(coordStr) + '">คัดลอกพิกัด</button>' +
+        '</div>';
+    } else if (sosState.statusText) {
+      coordHtml = '<div class="sos-status-msg" role="status" aria-live="polite">' + esc(sosState.statusText) + '</div>';
+    }
+
+    /* Top 3 nearest stations */
+    let nearestHtml = '';
+    if (hasPos) {
+      if (sosState.nearest && sosState.nearest.length) {
+        const cards = sosState.nearest.slice(0, 3).map(function (it, idx) {
+          const st = it.official;
+          const phone = st && st.phone ? formatPhone(st.phone) : 'ไม่มีข้อมูล';
+          const digits = st && st.phone ? phoneDigits(st.phone) : '';
+          const navDest = sosState.hasCoords && isFinite(it.lat) && isFinite(it.lon)
+            ? it.lat.toFixed(5) + ',' + it.lon.toFixed(5)
+            : it.name + (st ? ' ' + st.province_th : '');
+          const navUrl = 'https://www.google.com/maps/dir/?api=1&origin=' +
+            encodeURIComponent(coordStr) +
+            '&destination=' + encodeURIComponent(navDest);
+          const distBadge = sosState.hasCoords && isFinite(it.distKm)
+            ? '<span class="map-dist">' + it.distKm.toFixed(1) + ' กม.</span>'
+            : '<span class="map-badge">พื้นที่ใกล้เคียง</span>';
+          return (
+            '<div class="sos-station-item">' +
+              '<div class="sos-station-top">' +
+                '<span class="sos-rank">' + (idx + 1) + '</span>' +
+                '<div class="sos-station-info">' +
+                  '<strong>' + esc(it.name) + '</strong>' +
+                  '<div class="sos-station-sub">' + esc(st ? st.province_th + ' · โทร ' + phone : 'สถานีตำรวจจาก OSM') + '</div>' +
+                '</div>' +
+                distBadge +
+              '</div>' +
+              '<div class="sos-station-actions">' +
+                (digits
+                  ? '<a class="sos-act-btn sos-act-call" href="tel:' + esc(digits) + '">โทรด่วน ' + esc(phone) + '</a>'
+                  : '<span class="sos-act-btn sos-act-disabled">ไม่มีเบอร์โทร</span>') +
+                '<a class="sos-act-btn sos-act-nav" href="' + esc(navUrl) + '" target="_blank" rel="noopener">นำทางทันที</a>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        nearestHtml =
+          '<div class="sos-block">' +
+            '<div class="sos-block-title">สถานีตำรวจที่ใกล้ที่สุด (สูงสุด 3 อันดับ)</div>' +
+            cards +
+          '</div>';
+      } else {
+        nearestHtml =
+          '<div class="sos-block">' +
+            '<div class="sos-block-title">สถานีตำรวจที่ใกล้ที่สุด</div>' +
+            '<div class="map-sec-loading">กำลังคำนวณระยะทางไปยังสถานีตำรวจใกล้คุณ…</div>' +
+          '</div>';
+      }
+    }
+
+    /* Jurisdiction summary inside SOS panel */
+    let jurHtml = '';
+    if (hasPos && sosState.jurResult) {
+      const found = sosState.jurResult;
+      if (found.recs && found.recs.length) {
+        const rec = found.recs[0];
+        const st = ST_BY_ID.get(String(rec.id));
+        const fullName = st ? st.name : 'สภ.' + rec.short;
+        const warns = buildJurisdictionWarnings(rec, found.matchedTambon, found.byAmphoeOnly);
+        jurHtml =
+          '<div class="sos-block sos-jur-block">' +
+            '<div class="sos-block-title">เขตอำนาจสอบสวนของตำแหน่งปัจจุบัน</div>' +
+            '<div class="sos-jur-name">' + esc(fullName) + (sosState.jurAreaLabel ? ' <small>(' + esc(sosState.jurAreaLabel) + ')</small>' : '') + '</div>' +
+            (warns.length ? '<div class="map-jur-warn">' + esc(warns.join(' · ')) + '</div>' : '') +
+            '<p class="map-jur-note">โปรดยืนยันเขตอำนาจกับสถานีต้นทางและประกาศราชกิจจานุเบกษาก่อนดำเนินการทางกฎหมาย</p>' +
+          '</div>';
+      } else if (sosState.admin && sosState.admin.province === 'กรุงเทพมหานคร') {
+        jurHtml =
+          '<div class="sos-block sos-jur-block">' +
+            '<div class="sos-block-title">เขตอำนาจสอบสวน (กรุงเทพมหานคร)</div>' +
+            '<div class="sos-station-sub">พื้นที่ กทม. กำหนดเขตตามแนวถนน/คลอง กรุณาติดต่อ สน.ใกล้ที่สุดด้านบนหรือโทร 191 เพื่อยืนยันเขตรับผิดชอบ</div>' +
+          '</div>';
+      }
+    }
+
+    sosPanel.innerHTML =
+      '<div class="sos-card">' +
+        '<div class="sos-header">' +
+          '<div class="sos-title-wrap">' +
+            '<span class="sos-pulse-dot" aria-hidden="true"></span>' +
+            '<strong>โหมดเร่งด่วน (SOS)</strong>' +
+          '</div>' +
+          '<button type="button" class="sos-close-btn" id="sosCloseBtn" aria-label="ออกจากโหมดเร่งด่วน">ปิดโหมด SOS</button>' +
+        '</div>' +
+        '<div class="sos-hotlines" aria-label="สายด่วนฉุกเฉิน 1 คลิก">' +
+          '<a class="sos-hotline-btn sos-hotline-191" href="tel:191">' +
+            '<strong>โทร 191</strong><span>เหตุด่วนเหตุร้าย</span>' +
+          '</a>' +
+          '<a class="sos-hotline-btn sos-hotline-1599" href="tel:1599">' +
+            '<strong>โทร 1599</strong><span>สายด่วน ตร.</span>' +
+          '</a>' +
+        '</div>' +
+        coordHtml +
+        nearestHtml +
+        jurHtml +
+      '</div>';
+
+    const closeBtn = sosPanel.querySelector('#sosCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', deactivateSOSMode);
+
+    const sosCopyBtn = sosPanel.querySelector('#sosCopyBtn');
+    if (sosCopyBtn) {
+      sosCopyBtn.addEventListener('click', function (ev) {
+        const btn = ev.currentTarget;
+        const text = btn.dataset.coords;
+        if (!text) return;
+        copyCoords(text).then(function (ok) {
+          btn.textContent = ok ? 'คัดลอกแล้ว ✓' : 'คัดลอกไม่สำเร็จ';
+          setTimeout(function () { btn.textContent = 'คัดลอกพิกัด'; }, 1600);
+        });
+      });
+    }
+  }
+
+  function deactivateSOSMode() {
+    sosActive = false;
+    bodyEl.classList.remove('is-sos-mode');
+    if (sosBtn) sosBtn.setAttribute('aria-pressed', 'false');
+    if (sosPanel) { sosPanel.hidden = true; sosPanel.innerHTML = ''; }
+    if (lastOriginCoords) setMapActivePin(lastOriginCoords.lat, lastOriginCoords.lon, false);
+  }
+
+  function activateSOSMode() {
+    sosActive = true;
+    bodyEl.classList.add('has-results', 'is-sos-mode');
+    if (capsuleTilt) capsuleTilt.style.transform = 'none';
+    if (sosBtn) sosBtn.setAttribute('aria-pressed', 'true');
+
+    sosState = {
+      status: 'locating',
+      statusText: 'กำลังระบุพิกัด GPS ความแม่นยำสูง…',
+      lat: null,
+      lon: null,
+      accuracy: null,
+      nearest: [],
+      hasCoords: false,
+      jurResult: null,
+      jurAreaLabel: '',
+      admin: null
+    };
+    renderSOSPanel();
+    ensureMapInitialized();
+
+    if (!navigator.geolocation) {
+      sosState.status = 'error';
+      sosState.statusText = 'เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง GPS — สามารถโทร 191 / 1599 หรือพิมพ์ชื่อตำบล/สถานที่ในช่องค้นหาได้ทันที';
+      renderSOSPanel();
+      return;
+    }
+
+    bodyEl.classList.add('is-scanning');
+    showStatus('โหมดเร่งด่วน SOS: กำลังรับสัญญาณพิกัดปัจจุบัน…');
+    emitCapsulePulse(1, 680);
+
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        bodyEl.classList.remove('is-scanning');
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        sosState.status = 'ready';
+        sosState.statusText = '';
+        sosState.lat = lat;
+        sosState.lon = lon;
+        sosState.accuracy = pos.coords.accuracy;
+        renderSOSPanel();
+
+        const coordStr = lat.toFixed(5) + ', ' + lon.toFixed(5);
+        searchInput.value = coordStr;
+        syncInputState();
+        showStatus('');
+        executeSearch(coordStr);
+      },
+      function (err) {
+        bodyEl.classList.remove('is-scanning');
+        sosState.status = 'error';
+        if (err && err.code === 1) {
+          sosState.statusText = 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง GPS — กรุณาอนุญาตสิทธิ์ตำแหน่ง หรือกดโทร 191 / พิมพ์ชื่อสถานที่ในช่องค้นหา';
+        } else if (err && err.code === 3) {
+          sosState.statusText = 'หมดเวลารับสัญญาณ GPS — ลองกดโหมดเร่งด่วนอีกครั้ง หรือคลิกตำแหน่งของคุณบนแผนที่โดยตรง';
+        } else {
+          sosState.statusText = 'สัญญาณ GPS ขัดข้องในขณะนี้ — สามารถโทร 191 / 1599 หรือคลิกตำแหน่งบนแผนที่เพื่อหา สภ.ใกล้เคียงได้';
+        }
+        showStatus(sosState.statusText);
+        renderSOSPanel();
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  }
+
+  if (idleSosBtn) idleSosBtn.addEventListener('click', activateSOSMode);
+  if (sosBtn) {
+    sosBtn.addEventListener('click', function () {
+      if (sosActive) deactivateSOSMode();
+      else activateSOSMode();
+    });
+  }
+
+  if (idleExploreMapBtn) {
+    idleExploreMapBtn.addEventListener('click', function () {
+      bodyEl.classList.add('has-results');
+      if (capsuleTilt) capsuleTilt.style.transform = 'none';
+      activePlaceChip.textContent = 'คลิกจุดใดก็ได้บนแผนที่เพื่อตรวจเขตอำนาจและหา สภ.ใกล้เคียง';
+      ensureMapInitialized().then(function (m) {
+        if (m) flyMapTo(13.7563, 100.5018, 5.5);
+      });
+    });
+  }
+
+  /* =====================================================================
+     9. Copy Coordinates Helper
+  ===================================================================== */
   function copyCoords(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       return navigator.clipboard.writeText(text).then(function () { return true; }).catch(function () { return fallbackCopy(text); });
@@ -760,18 +1745,20 @@
       return ok;
     } catch (_) { return false; }
   }
-  copyCoordBtn.addEventListener('click', function () {
-    const coords = copyCoordBtn.dataset.coords;
-    if (!coords) return;
-    copyCoords(coords).then(function (ok) {
-      copyCoordText.textContent = ok ? 'คัดลอกแล้ว ✓' : 'คัดลอกไม่สำเร็จ';
-      clearTimeout(copyTimer);
-      copyTimer = setTimeout(function () { copyCoordText.textContent = 'คัดลอกพิกัด'; }, 1600);
+  if (copyCoordBtn) {
+    copyCoordBtn.addEventListener('click', function () {
+      const coords = copyCoordBtn.dataset.coords;
+      if (!coords) return;
+      copyCoords(coords).then(function (ok) {
+        copyCoordText.textContent = ok ? 'คัดลอกแล้ว ✓' : 'คัดลอกไม่สำเร็จ';
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(function () { copyCoordText.textContent = 'คัดลอกพิกัด'; }, 1600);
+      });
     });
-  });
+  }
 
   /* =====================================================================
-     6. Live Geocoding & Coordinate Parsing (OSM Nominatim)
+     10. Live Geocoding & Coordinate Parsing (OSM Nominatim)
   ===================================================================== */
   function parseDirectCoordinates(raw) {
     const match = raw.trim().match(/^(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)$/);
@@ -784,15 +1771,16 @@
   function renderResults(items) {
     currentResults = items || [];
     bodyEl.classList.add('has-results');
-    capsuleTilt.style.transform = 'none';
+    if (capsuleTilt) capsuleTilt.style.transform = 'none';
 
-    sourceBadge.textContent = 'LIVE · OSM';
+    if (sourceBadge && mapReady) sourceBadge.textContent = 'WEBGL · OSM';
     resultsLabel.textContent = 'สภ./สน. ใกล้ตำแหน่งนี้ & เขตอำนาจ';
     resultsList.innerHTML = '';
 
     if (!currentResults.length) {
       if (mapJurBox) { mapJurBox.innerHTML = ''; mapJurBox.hidden = true; }
       if (nearbyStationsBox) { nearbyStationsBox.innerHTML = ''; nearbyStationsBox.hidden = true; }
+      if (neighborStationsBox) { neighborStationsBox.innerHTML = ''; neighborStationsBox.hidden = true; }
       const emptyDiv = document.createElement('div');
       emptyDiv.className = 'empty-state';
       emptyDiv.textContent = 'ไม่พบตำแหน่งที่ตรงกับคำค้นหา ลองระบุชื่อสถานที่ ตำบล เขต หรือพิกัดละติจูด, ลองจิจูด (เช่น 13.7563, 100.5018)';
@@ -840,9 +1828,11 @@
   async function executeSearch(queryText) {
     const trimmed = queryText.trim();
     if (!trimmed) {
-      capsuleTilt.classList.remove('shake');
-      void capsuleTilt.offsetWidth;
-      capsuleTilt.classList.add('shake');
+      if (capsuleTilt) {
+        capsuleTilt.classList.remove('shake');
+        void capsuleTilt.offsetWidth;
+        capsuleTilt.classList.add('shake');
+      }
       searchInput.focus();
       return;
     }
@@ -904,7 +1894,7 @@
   searchForm.addEventListener('submit', function (e) { e.preventDefault(); executeSearch(searchInput.value); });
 
   /* =====================================================================
-     7. GPS Live Position Trigger ("สภ./สน. ใกล้ฉัน")
+     11. GPS Live Position Trigger ("สภ./สน. ใกล้ฉัน")
   ===================================================================== */
   function triggerGPS() {
     if (!navigator.geolocation) {
@@ -932,14 +1922,14 @@
       { enableHighAccuracy: true, timeout: 7000 }
     );
   }
-  gpsBtn.addEventListener('click', triggerGPS);
+  if (gpsBtn) gpsBtn.addEventListener('click', triggerGPS);
   if (idleGpsBtn) idleGpsBtn.addEventListener('click', triggerGPS);
 
   /* =====================================================================
-     8. Voice Search Trigger (Web Speech API)
+     12. Voice Search Trigger (Web Speech API)
   ===================================================================== */
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SpeechRec) {
+  if (SpeechRec && voiceBtn) {
     voiceBtn.style.display = 'inline-flex';
     const recognition = new SpeechRec();
     recognition.lang = 'th-TH';
@@ -976,11 +1966,19 @@
   }
 
   /* =====================================================================
-     9. URL param (?q=) + Real Visitor Counter (/api/visit)
+     13. URL param (?q= / ?sos=1) + Real Visitor Counter (/api/visit)
   ===================================================================== */
   try {
-    const initialQ = new URLSearchParams(window.location.search).get('q');
-    if (initialQ) { searchInput.value = initialQ; syncInputState(); executeSearch(initialQ); }
+    const params = new URLSearchParams(window.location.search);
+    const initialQ = params.get('q');
+    const initialSos = params.get('sos');
+    if (initialSos === '1') {
+      activateSOSMode();
+    } else if (initialQ) {
+      searchInput.value = initialQ;
+      syncInputState();
+      executeSearch(initialQ);
+    }
   } catch (_) {}
 
   if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1' && location.protocol !== 'file:') {

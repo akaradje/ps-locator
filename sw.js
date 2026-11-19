@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'v1.7.0-p1';
+const CACHE_VERSION = 'v1.7.0-p2';
 const SHELL_CACHE = 'ps-locator-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'ps-locator-data-' + CACHE_VERSION;
 
@@ -26,6 +26,7 @@ const SHELL_ASSETS = [
 const DATA_ASSETS = [
   './data/stations.js',
   './data/jurisdictions.js',
+  './data/station-coords.json',
 ];
 
 const NAV_FALLBACK_MAP = {
