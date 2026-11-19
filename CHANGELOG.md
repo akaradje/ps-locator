@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.1.0 — 20 พฤศจิกายน 2569 ✅ ออนไลน์แล้ว · Programmatic Edge SEO (1,566 URLs) + OG PNG 1200×630 + Real-Time Voice + Hybrid Edge AI RAG
+
+**🌐 https://ps-locator.prajamwan.workers.dev** (Cloudflare Workers + Assets + D1 + Workers AI + Vectorize)
+
+### เพิ่ม & ปรับปรุง
+- **Programmatic Edge SEO เต็มรูปแบบ (`worker.js`, `sitemap.xml`, `robots.txt`, `llms.txt`, `tools/submit-indexnow.mjs`):**
+  - เพิ่มหน้า SSR ระดับ Edge (`s-maxage=86400`) ครบ **1,562 หน้า**: `/station/<id>` (1,484 สถานี พร้อม JSON-LD `PoliceStation` + `BreadcrumbList`), `/province/<จังหวัด>` (77 จังหวัด พร้อม `CollectionPage` + `ItemList`), และ `/provinces` (สารบบ 77 จังหวัดครบ 10 กองบัญชาการ)
+  - เพิ่ม Dynamic Sitemap Index (`/sitemap.xml` → `/sitemap-core.xml`, `/sitemap-provinces.xml`, `/sitemap-stations.xml` รวม **1,566 URLs**), `FAQPage` Schema, `hreflang`, `llms.txt` สำหรับ AI Search Engines, และส่งแจ้ง **IndexNow ครบ 1,566 URLs (`HTTP 200 OK`)**
+- **ภาพพรีวิวโซเชียล OpenGraph PNG `1200×630` ใหม่ครบ 3 หน้า (`assets/og-cover-v2.png`, `assets/og-jurisdiction-v2.png`, `assets/og-map-v2.png`):**
+  - แทนที่ภาพโปสเตอร์ QR แนวตั้งเดิมใน `og:image` และ `twitter:image` ด้วยแบนเนอร์ PNG `1200×630` ดีไซน์ Spatial Minimalist v2.0 รองรับการแสดงผลใน LINE, Facebook, X และ Discord ครบทุกหน้า
+- **ระบบค้นหาด้วยเสียงภาษาไทยแบบ Real-Time (`assets/app.js`, `assets/map.js`, `jurisdiction.html`, `assets/styles.css`):**
+  - เปิด `interimResults = true` พิมพ์ข้อความสดขึ้นในช่องค้นหาทันทีขณะพูด พร้อมแสดงคำแนะนำอัตโนมัติ, สร้าง `SpeechRecognition` instance ใหม่ทุกครั้งที่กดไมค์ (ไม่ค้าง), ปุ่มไมค์สีแดงสดกะพริบขณะฟัง, และแจ้งเตือนภาษาไทยชัดเจนแยกตามสาเหตุหากไมโครโฟนถูกบล็อก (ครบทั้ง 4 ช่องค้นหาใน 3 หน้า)
+- **Hybrid Edge AI Gazette RAG (`worker.js`):**
+  - เพิ่ม Built-in Gazette Lexical Retriever ค้นหาจากประกาศราชกิจจานุเบกษาทั้ง 440 หน้า (`docs/gazette/2567.txt` 427 หน้า + `2568-2.txt` 13 หน้า) ผสานกับ Vectorize และ Workers AI (`@cf/meta/llama-3.1-8b-instruct`) พร้อม Resilient Parser และ Post-Verification Guard ให้ผู้ช่วย AI ตอบคำถามเขตอำนาจและอ้างอิงเลขหน้า PDF จริงได้ 100%
+
+### หมายเหตุข้อมูล (สำคัญ)
+- **ข้อมูลสถานีและเขตอำนาจไม่ถูกแก้ไขแม้แต่รายการเดียว** — `git diff v1.6.0 v2.1.0 -- data/stations.js data/stations.json data/jurisdictions.js docs/gazette/` ว่างเปล่า 100% (`1,484` สถานีครบ `77` จังหวัด และ `1,372` สถานี / `7,253` รายการตำบล)
+
 ## v2.0.0 — 20 พฤศจิกายน 2569 ✅ ออนไลน์แล้ว · ยกระดับเทคโนโลยี 4 มิติ (Next-Gen Upgrade)
 
 **🌐 https://ps-locator.prajamwan.workers.dev** (Cloudflare Workers + Assets + D1 + Workers AI + Vectorize)

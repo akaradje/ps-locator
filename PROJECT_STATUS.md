@@ -10,7 +10,7 @@
 
 | หัวข้อ | สถานะ |
 |---|---|
-| เวอร์ชันเผยแพร่ล่าสุด | **v2.0.0** (branch `main`, tag `v2.0.0`, ออนไลน์แล้วบน Cloudflare Workers) |
+| เวอร์ชันเผยแพร่ล่าสุด | **v2.1.0** (branch `main`, tag `v2.1.0`, ออนไลน์แล้วบน Cloudflare Workers) |
 | เว็บไซต์จริง | https://ps-locator.prajamwan.workers.dev (Cloudflare Workers + Assets + D1 + Workers AI + Vectorize, HTTPS) |
 | Repo สาธารณะ | https://github.com/akaradje/ps-locator (branch `main`) |
 | ข้อมูลสถานี | ✅ **1,484 แห่ง ครบ 77 จังหวัด** — ยืนยันจากสำนักงานตำรวจแห่งชาติ ณ 16 พ.ย. 2569 (ไม่ถูกแก้ไขทุกเวอร์ชัน) |
