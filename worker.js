@@ -56,6 +56,35 @@ let cachedStations = null;
 let cachedStationsById = null;
 let cachedStationsByProvince = null;
 let cachedProvincesByRegion = null;
+let cachedGazettePages = null;
+
+const THAI_DIGIT_MAP = {
+  '๐': '0',
+  '๑': '1',
+  '๒': '2',
+  '๓': '3',
+  '๔': '4',
+  '๕': '5',
+  '๖': '6',
+  '๗': '7',
+  '๘': '8',
+  '๙': '9',
+};
+
+function toArabicDigits(str) {
+  return String(str ?? '').replace(/[๐-๙]/g, (ch) => THAI_DIGIT_MAP[ch] || ch);
+}
+
+function escapeRegExp(str) {
+  return String(str ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripStationPrefix(name) {
+  return String(name ?? '')
+    .normalize('NFC')
+    .replace(/^(?:สถานีตำรวจนครบาล|สถานีตำรวจภูธร|สภ\.อ\.|สน\.|สภ\.)\s*/u, '')
+    .trim();
+}
 
 function escapeXml(str) {
   return String(str ?? '')
@@ -501,6 +530,504 @@ function extractEmbeddingVector(embedRes) {
   return null;
 }
 
+const QUESTION_STOPWORDS = new Set([
+  'ไหน',
+  'ใด',
+  'อะไร',
+  'ไหนบ้าง',
+  'ใดบ้าง',
+  'อะไรบ้าง',
+  'บ้าง',
+  'หรือ',
+  'หรือไม่',
+  'ไหม',
+  'ครับ',
+  'ค่ะ',
+  'คะ',
+  'เกิด',
+  'เหตุ',
+  'เกิดเหตุ',
+  'เหตุเกิด',
+  'แจ้ง',
+  'แจ้งความ',
+  'โรงพัก',
+  'สถานี',
+  'ตำรวจ',
+  'เขต',
+  'อำนาจ',
+  'เขตอำนาจ',
+  'สอบสวน',
+  'รับผิดชอบ',
+  'ผู้รับผิดชอบ',
+  'ข้อยกเว้น',
+  'ยกเว้น',
+  'เปลี่ยนแปลง',
+  'ประกาศ',
+  'ฉบับ',
+  'ฉบับที่',
+  'พ.ศ.',
+  'ปี',
+  'มี',
+  'ที่',
+  'ใน',
+  'ของ',
+  'และ',
+  'กับ',
+  'ไป',
+  'ต้อง',
+  'คือ',
+  'อยู่',
+  'ต.',
+  'ตำบล',
+  'แขวง',
+  'อ.',
+  'อำเภอ',
+  'จ.',
+  'จังหวัด',
+  'สภ.',
+  'สน.',
+  'ตร.',
+]);
+
+async function loadGazettePages(env, requestUrl) {
+  if (cachedGazettePages && cachedGazettePages.length) {
+    return cachedGazettePages;
+  }
+  const files = [
+    { doc_code: '2567', path: '/docs/gazette/2567.txt' },
+    { doc_code: '2568-2', path: '/docs/gazette/2568-2.txt' },
+  ];
+  const pages = [];
+  for (let f = 0; f < files.length; f++) {
+    const file = files[f];
+    try {
+      const assetUrl = new URL(file.path, requestUrl);
+      const res = await env.ASSETS.fetch(new Request(assetUrl.toString()));
+      if (!res || !res.ok) continue;
+      const raw = (await res.text()).replace(/\r\n?/g, '\n');
+      const parts = raw.split(/^=== PAGE (\d+) ===\s*$/m);
+      for (let i = 1; i < parts.length; i += 2) {
+        const pageNum = Number(parts[i]);
+        const text = String(parts[i + 1] || '').trim();
+        if (!Number.isInteger(pageNum) || pageNum <= 0 || !text) continue;
+        pages.push({
+          doc_code: file.doc_code,
+          page_number: pageNum,
+          text,
+          normText: toArabicDigits(text.normalize('NFC')),
+        });
+      }
+    } catch {
+      /* Ignore single file fetch error */
+    }
+  }
+  if (pages.length) {
+    cachedGazettePages = pages;
+  }
+  return pages;
+}
+
+function extractQueryKeywords(query, stationsList) {
+  const qNorm = toArabicDigits(String(query || '').normalize('NFC')).trim();
+  const prefer2568 = /ฉบับที่\s*2|ปี\s*2568|พ\.ศ\.\s*2568|\b2568\b|ตำรวจทางหลวง|ความเห็นทางคดีอาญา/.test(qNorm);
+
+  const primaryTerms = [];
+  const seenPrimary = new Set();
+  const addPrimary = (term) => {
+    const clean = String(term || '')
+      .replace(/^(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|เขต|จ\.|จังหวัด|สภ\.|สน\.|สถานีตำรวจภูธร|สถานีตำรวจนครบาล)\s*/u, '')
+      .replace(/(?:ไหนบ้าง|ใดบ้าง|อะไรบ้าง|ไหน|ใด|อะไร|\?)+$/u, '')
+      .trim();
+    if (clean.length >= 2 && !QUESTION_STOPWORDS.has(clean) && !seenPrimary.has(clean)) {
+      seenPrimary.add(clean);
+      primaryTerms.push(clean);
+    }
+  };
+
+  /* 1) Capture explicit entity names after ต./ตำบล/แขวง/อ./อำเภอ/จ./จังหวัด/สภ./สน. */
+  const prefixRe = /(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|จ\.|จังหวัด|สภ\.|สน\.|สถานีตำรวจภูธร|สถานีตำรวจนครบาล)\s*([ก-๙]{2,32})/gu;
+  let m;
+  while ((m = prefixRe.exec(qNorm)) !== null) {
+    addPrimary(m[1]);
+  }
+
+  /* 2) Detect province names from stationsList */
+  const provinceTerms = [];
+  const seenProv = new Set();
+  for (let i = 0; i < stationsList.length; i++) {
+    const prov = String(stationsList[i].province_th || '').trim();
+    if (prov && !seenProv.has(prov) && qNorm.includes(prov)) {
+      seenProv.add(prov);
+      provinceTerms.push(prov);
+    }
+  }
+
+  /* 3) Strip boilerplate conversational phrases */
+  const stripped = qNorm
+    .replace(
+      /เหตุเกิดที่|เกิดเหตุที่|แจ้งความที่ไหน|แจ้งความที่|แจ้งความ|แจ้งที่ไหน|สภ\.ไหน|สน\.ไหน|สภ\.ใด|สน\.ใด|โรงพักไหน|สถานีตำรวจใด|สถานีใดบ้าง|สถานีใด|เขตอำนาจสอบสวน|เขตอำนาจการรับผิดชอบ|เขตอำนาจ|มีข้อยกเว้นหรือไม่|มีข้อยกเว้นไหม|ข้อยกเว้น|ผู้รับผิดชอบ|รับผิดชอบบ้าง|รับผิดชอบ|เปลี่ยนแปลงสถานีใดบ้าง|เปลี่ยนแปลงอะไรบ้าง|เปลี่ยนแปลง|ประกาศสำนักงานตำรวจแห่งชาติ|ประกาศ\s*ตร\.|ฉบับที่\s*2|ปี\s*2568|พ\.ศ\.\s*2568|คือที่ไหน|อยู่ที่ไหน|ที่ไหน|อะไรบ้าง|ใดบ้าง|หรือไม่|ไหม|[?"'“”()]/gu,
+      ' '
+    )
+    .replace(/\b(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|จ\.|จังหวัด|สภ\.|สน\.|ตร\.)\s*/gu, ' ');
+
+  const tokens = [];
+  const seenTok = new Set();
+  const addToken = (tok) => {
+    const t = String(tok || '').trim();
+    if (t.length < 2 || QUESTION_STOPWORDS.has(t) || seenTok.has(t)) return;
+    seenTok.add(t);
+    tokens.push(t);
+  };
+
+  for (const part of stripped.split(/\s+/)) {
+    const cleanPart = part.replace(/(?:ไหน|ใด|อะไร|บ้าง)+$/u, '').trim();
+    if (cleanPart.length >= 2 && !QUESTION_STOPWORDS.has(cleanPart)) {
+      addToken(cleanPart);
+      if (!seenPrimary.has(cleanPart) && !seenProv.has(cleanPart) && cleanPart.length >= 3) {
+        addPrimary(cleanPart);
+      }
+    }
+  }
+
+  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+    const seg = new Intl.Segmenter('th', { granularity: 'word' });
+    for (const item of seg.segment(stripped)) {
+      if (item.isWordLike) addToken(item.segment);
+    }
+  }
+
+  return { primaryTerms, provinceTerms, tokens, prefer2568 };
+}
+
+function matchStationsForPage(page, stationsList, primaryTerms, snippetText) {
+  const text = page.text;
+  const isBkkPage = text.includes('กองบัญชาการตำรวจนครบาล') || text.includes('กรุงเทพมหานคร');
+  const pageHeaderProvMatch = text.match(/ตำรวจภูธรจังหวัด([ก-๙]+)/u);
+  const pageHeaderProv = pageHeaderProvMatch ? pageHeaderProvMatch[1].trim() : '';
+
+  /* Split provincial page into individual station blocks starting with \n<seq>\n<stationName>\n */
+  const entryBlocks = text.split(/\n(?=\d+\n[ก-๙])/u);
+
+  const pageCandidates = [];
+  for (let i = 0; i < stationsList.length; i++) {
+    const st = stationsList[i];
+    if (!st) continue;
+    const prov = String(st.province_th || '').trim();
+    const shortName = stripStationPrefix(st.name);
+    if (!shortName) continue;
+
+    if (prov === 'กรุงเทพมหานคร') {
+      if (!isBkkPage) continue;
+      const bkkRe = new RegExp(`(?:สถานีตำรวจนครบาล\\s*|สน\\.\\s*)${escapeRegExp(shortName)}(?:\\s|\\n|$)`, 'u');
+      if (!bkkRe.test(text)) continue;
+    } else {
+      if (pageHeaderProv && pageHeaderProv !== prov) continue;
+      if (!pageHeaderProv && !text.includes(prov)) continue;
+      const provRe = new RegExp(
+        `(?:^|\\n)${escapeRegExp(shortName)}\\n|(?:สถานีตำรวจภูธร\\s*|สภ\\.\\s*)${escapeRegExp(shortName)}(?:\\s|\\n|$)`,
+        'u'
+      );
+      if (!provRe.test(text)) continue;
+    }
+
+    let rank = 10;
+
+    /* Check if this station is the owner of an entry block that contains a primaryTerm */
+    const ownerHeaderRe = new RegExp(`^(?:\\d+\\n)?${escapeRegExp(shortName)}\\n`, 'u');
+    for (let b = 0; b < entryBlocks.length; b++) {
+      const blk = entryBlocks[b].trim();
+      if (ownerHeaderRe.test(blk)) {
+        for (let p = 0; p < primaryTerms.length; p++) {
+          if (blk.includes(primaryTerms[p])) {
+            rank = Math.min(rank, 1);
+          }
+        }
+      } else {
+        /* Or if this station is referenced inside an entry block that matches a primaryTerm (e.g. Amphoe or boundary station) */
+        const refRe = new RegExp(`(?:^|\\n|สถานีตำรวจภูธร\\s*|สภ\\.\\s*)${escapeRegExp(shortName)}(?:\\s*\\n|\\s|$)`, 'u');
+        if (refRe.test(blk)) {
+          for (let p = 0; p < primaryTerms.length; p++) {
+            if (blk.includes(primaryTerms[p])) {
+              rank = Math.min(rank, 2);
+            }
+          }
+        }
+      }
+    }
+
+    for (let p = 0; p < primaryTerms.length; p++) {
+      const pt = primaryTerms[p];
+      if (shortName === pt) {
+        rank = Math.min(rank, 1);
+      }
+    }
+
+    const inSnippetRe = new RegExp(
+      `(?:^|\\n)\\d+\\n${escapeRegExp(shortName)}\\n|(?:สถานีตำรวจ(?:ภูธร|นครบาล)\\s*|สภ\\.\\s*|สน\\.\\s*)${escapeRegExp(shortName)}(?:\\s*\\n|\\s|$)`,
+      'u'
+    );
+    if (snippetText && inSnippetRe.test(snippetText)) {
+      rank = Math.min(rank, 3);
+    }
+
+    pageCandidates.push({ id: String(st.id), rank });
+  }
+
+  pageCandidates.sort((a, b) => a.rank - b.rank);
+  const tier12 = pageCandidates.filter((c) => c.rank <= 2);
+  const tier3 = pageCandidates.filter((c) => c.rank <= 3);
+  const picked = (tier12.length ? tier12 : tier3.length ? tier3 : pageCandidates).slice(0, 5);
+  return picked.map((c) => c.id);
+}
+
+function buildPageSnippet(page, primaryTerms, tokens) {
+  const full = page.text;
+  if (full.length <= 1080) return full;
+
+  const firstLineEnd = full.indexOf('\n');
+  const headerLine = firstLineEnd > 0 && firstLineEnd < 180 ? full.slice(0, firstLineEnd).trim() : '';
+
+  /* Prefer starting at the station entry block (\n<seq>\n<stationName>) that contains the primaryTerm */
+  let anchorIdx = -1;
+  for (let i = 0; i < primaryTerms.length; i++) {
+    const idx = page.normText.indexOf(primaryTerms[i]);
+    if (idx !== -1) {
+      anchorIdx = idx;
+      break;
+    }
+  }
+  if (anchorIdx === -1) {
+    for (let i = 0; i < tokens.length; i++) {
+      const idx = page.normText.indexOf(tokens[i]);
+      if (idx !== -1) {
+        anchorIdx = idx;
+        break;
+      }
+    }
+  }
+
+  if (anchorIdx === -1) {
+    return full.slice(0, 1080);
+  }
+
+  /* Walk back to the start of the station entry (\n\d+\n) if within 450 chars */
+  const lookback = full.slice(Math.max(0, anchorIdx - 450), anchorIdx);
+  const entryMatches = [...lookback.matchAll(/\n\d+\n[ก-๙]/gu)];
+  let start;
+  if (entryMatches.length > 0) {
+    const lastEntryOffset = entryMatches[entryMatches.length - 1].index + 1;
+    start = Math.max(0, anchorIdx - 450) + lastEntryOffset;
+  } else {
+    start = Math.max(0, anchorIdx - 280);
+  }
+
+  const end = Math.min(full.length, start + 980);
+  const bodySlice = full.slice(start, end).trim();
+  if (headerLine && !bodySlice.includes(headerLine)) {
+    return `${headerLine}\n${bodySlice}`.slice(0, 1100);
+  }
+  return bodySlice.slice(0, 1100);
+}
+
+async function retrieveGazetteMatches(env, requestUrl, query, stationsList) {
+  const pages = await loadGazettePages(env, requestUrl);
+  if (!pages.length) return [];
+
+  const { primaryTerms, provinceTerms, tokens, prefer2568 } = extractQueryKeywords(query, stationsList);
+  const nonProvPrimary = primaryTerms.filter((t) => !provinceTerms.includes(t));
+  const effectivePrimary = nonProvPrimary.length ? nonProvPrimary : primaryTerms;
+  const scored = [];
+
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    if (page.doc_code === '2567' && page.page_number <= 2 && !prefer2568) {
+      continue;
+    }
+
+    const pageHeaderProvMatch = page.text.match(/ตำรวจภูธรจังหวัด([ก-๙]+)/u);
+    const pageHeaderProv = pageHeaderProvMatch ? pageHeaderProvMatch[1].trim() : '';
+
+    let score = 0;
+    let primaryHits = 0;
+    let provinceHits = 0;
+
+    if (prefer2568 && page.doc_code === '2568-2') {
+      score += 60;
+      if ([1, 2, 7, 8, 9, 11, 13].includes(page.page_number)) {
+        score += 25;
+      }
+    }
+
+    for (let pv = 0; pv < provinceTerms.length; pv++) {
+      const prov = provinceTerms[pv];
+      if (pageHeaderProv === prov) {
+        provinceHits++;
+        score += 55;
+      } else if (!pageHeaderProv && page.normText.includes(prov)) {
+        provinceHits++;
+        score += 30;
+      }
+    }
+
+    for (let p = 0; p < effectivePrimary.length; p++) {
+      const term = effectivePrimary[p];
+      if (page.normText.includes(term)) {
+        primaryHits++;
+        score += 60;
+        const numberedRe = new RegExp(`\\d+\\.\\s*${escapeRegExp(term)}(?:\\s|\\(|$)`, 'u');
+        if (numberedRe.test(page.normText)) {
+          score += 35;
+        }
+        const stationLineRe = new RegExp(
+          `(?:^|\\n)\\d+\\n${escapeRegExp(term)}\\n|(?:สถานีตำรวจ(?:ภูธร|นครบาล)\\s*)${escapeRegExp(term)}(?:\\s*\\n|\\s|$)`,
+          'u'
+        );
+        if (stationLineRe.test(page.normText)) {
+          score += 40;
+        }
+      }
+    }
+
+    for (let t = 0; t < tokens.length; t++) {
+      const tok = tokens[t];
+      if (page.normText.includes(tok)) {
+        score += tok.length >= 4 ? 10 : 5;
+      }
+    }
+
+    if (primaryHits > 0 && /บางส่วน|เฉพาะหมู่ที่|แนวแบ่งเขต/.test(page.normText)) {
+      score += 8;
+    }
+
+    if (score > 0) {
+      scored.push({ page, score, primaryHits, provinceHits, pageHeaderProv });
+    }
+  }
+
+  if (!scored.length) return [];
+
+  /* If province was explicitly specified and we have matches in that province, restrict to that province */
+  let pool = scored;
+  if (provinceTerms.length > 0) {
+    const inProv = pool.filter((x) => x.provinceHits > 0);
+    if (inProv.length > 0) {
+      pool = inProv;
+    }
+  }
+
+  const withPrimary = pool.filter((x) => x.primaryHits > 0 || (prefer2568 && x.page.doc_code === '2568-2'));
+  if (withPrimary.length > 0) {
+    pool = withPrimary;
+  }
+
+  pool.sort((a, b) => {
+    if (b.primaryHits !== a.primaryHits) return b.primaryHits - a.primaryHits;
+    if (b.provinceHits !== a.provinceHits) return b.provinceHits - a.provinceHits;
+    if (b.score !== a.score) return b.score - a.score;
+    return a.page.page_number - b.page.page_number;
+  });
+
+  const topPages = pool.slice(0, 5);
+  return topPages.map(({ page, score }) => {
+    const docInfo = GAZETTE_DOC_MAP[page.doc_code] || GAZETTE_DOC_MAP['2567'];
+    const snippet = buildPageSnippet(page, effectivePrimary, tokens);
+    const stationIds = matchStationsForPage(page, stationsList, effectivePrimary, snippet);
+    return {
+      score,
+      metadata: {
+        doc_code: page.doc_code,
+        label: docInfo.label,
+        page_number: page.page_number,
+        pdf_url: docInfo.pdf_url,
+        station_ids: stationIds,
+        text: snippet,
+      },
+    };
+  });
+}
+
+function extractBoundaryExceptionsFromMatches(matches) {
+  const exceptions = [];
+  const seen = new Set();
+  for (let i = 0; i < matches.length; i++) {
+    const txt = String((matches[i] && matches[i].metadata && matches[i].metadata.text) || '');
+    if (!txt) continue;
+    const clauses = txt.split(/(?=\d+\.\s+[ก-๙])|\n+/u);
+    for (let c = 0; c < clauses.length; c++) {
+      const line = clauses[c].replace(/\s+/g, ' ').trim();
+      if (line.length < 12) continue;
+      if (/บางส่วน|เฉพาะหมู่ที่|แนวแบ่งเขต|แนวเขต|ฝั่ง|กึ่งกลาง/.test(line)) {
+        const clipped = line.slice(0, 260);
+        if (!seen.has(clipped)) {
+          seen.add(clipped);
+          exceptions.push(clipped);
+          if (exceptions.length >= 4) return exceptions;
+        }
+      }
+    }
+  }
+  return exceptions;
+}
+
+function extractRawLlmText(rawOutput) {
+  if (typeof rawOutput === 'string') return rawOutput.trim();
+  if (rawOutput && typeof rawOutput === 'object') {
+    if (typeof rawOutput.response === 'string') return rawOutput.response.trim();
+    if (typeof rawOutput.summary === 'string') return rawOutput.summary.trim();
+  }
+  return '';
+}
+
+function buildResilientParsedLlm(llmRes, matches, stationsList) {
+  const direct = parseLlmJson(llmRes);
+  if (direct && typeof direct === 'object') return direct;
+
+  const rawText = extractRawLlmText(llmRes);
+  let cleanSummary = rawText
+    .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '')
+    .replace(/^\s*\{\s*"summary"\s*:\s*"?/i, '')
+    .replace(/"?\s*,?\s*"(?:stations|boundary_exceptions|neighbors|citations)"[\s\S]*$/i, '')
+    .replace(/[{}[\]]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleanSummary) {
+    const firstMd = (matches[0] && matches[0].metadata) || {};
+    const docLabel = firstMd.label || 'ประกาศสำนักงานตำรวจแห่งชาติ';
+    const pageList = matches
+      .map((m) => m && m.metadata && m.metadata.page_number)
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(', ');
+    cleanSummary = `อ้างอิงจาก${docLabel} (หน้า ${pageList || '-'}) พบรายละเอียดเขตอำนาจการรับผิดชอบตามข้อความประกาศราชกิจจานุเบกษาที่เกี่ยวข้อง กรุณาตรวจสอบแนวเขตและสถานีตำรวจผู้รับผิดชอบจากรายการด้านล่าง`;
+  }
+
+  const matchedStations = [];
+  for (let i = 0; i < stationsList.length; i++) {
+    const st = stationsList[i];
+    if (!st || !st.name) continue;
+    const shortName = stripStationPrefix(st.name);
+    if (rawText && (rawText.includes(st.name) || (shortName.length >= 3 && rawText.includes(`สภ.${shortName}`)) || (shortName.length >= 3 && rawText.includes(`สน.${shortName}`)))) {
+      matchedStations.push({ id: String(st.id), note: '' });
+      if (matchedStations.length >= 5) break;
+    }
+  }
+
+  return {
+    summary: cleanSummary.slice(0, 1200),
+    stations: matchedStations,
+    boundary_exceptions: extractBoundaryExceptionsFromMatches(matches),
+    neighbors: [],
+    citations: matches
+      .map((m) => {
+        const md = (m && m.metadata) || {};
+        return { doc_code: md.doc_code, page_number: md.page_number };
+      })
+      .filter((c) => c.doc_code && c.page_number),
+  };
+}
+
 function parseLlmJson(rawOutput) {
   if (rawOutput && typeof rawOutput === 'object' && !Array.isArray(rawOutput)) {
     if (typeof rawOutput.response === 'string') {
@@ -527,8 +1054,8 @@ function parseLlmJson(rawOutput) {
   }
 }
 
-function verifyAiRagResult(parsed, matches, stationsById) {
-  /* Build allowed citations strictly from Vectorize matches */
+function verifyAiRagResult(parsed, matches, stationsById, stationsList = []) {
+  /* Build allowed citations strictly from matched chunks */
   const allowedCitations = new Map();
   const allowedStationIds = new Set();
   for (let i = 0; i < matches.length; i++) {
@@ -556,7 +1083,7 @@ function verifyAiRagResult(parsed, matches, stationsById) {
     }
   }
 
-  /* Strictly filter LLM citations against Vectorize matches */
+  /* Strictly filter LLM citations against matched chunks + ensure top matched citations are included */
   const verifiedCitations = [];
   const seenCite = new Set();
   const rawCites = Array.isArray(parsed && parsed.citations) ? parsed.citations : [];
@@ -570,10 +1097,11 @@ function verifyAiRagResult(parsed, matches, stationsById) {
       verifiedCitations.push(allowedCitations.get(key));
     }
   }
-  if (!verifiedCitations.length) {
-    for (const cite of allowedCitations.values()) {
+  for (const [key, cite] of allowedCitations.entries()) {
+    if (verifiedCitations.length >= 4) break;
+    if (!seenCite.has(key)) {
+      seenCite.add(key);
       verifiedCitations.push(cite);
-      if (verifiedCitations.length >= 4) break;
     }
   }
 
@@ -583,13 +1111,30 @@ function verifyAiRagResult(parsed, matches, stationsById) {
   const rawStations = Array.isArray(parsed && parsed.stations) ? parsed.stations : [];
   for (let i = 0; i < rawStations.length; i++) {
     const item = rawStations[i];
-    const rawId = item && typeof item === 'object' ? (item.id ?? item.station_id) : item;
+    const rawId = item && typeof item === 'object' ? (item.id ?? item.station_id ?? item.name) : item;
     if (rawId === undefined || rawId === null) continue;
     const sid = String(rawId).trim();
-    if (!sid || seenStation.has(sid)) continue;
-    const real = stationsById.get(sid);
+    if (!sid) continue;
+
+    let real = stationsById.get(sid);
+    if (!real && stationsList.length) {
+      const targetNorm = normStation(sid);
+      if (targetNorm) {
+        for (let k = 0; k < stationsList.length; k++) {
+          const candidate = stationsList[k];
+          if (normStation(candidate.name) === targetNorm) {
+            if (!real || allowedStationIds.has(String(candidate.id))) {
+              real = candidate;
+              if (allowedStationIds.has(String(candidate.id))) break;
+            }
+          }
+        }
+      }
+    }
     if (!real) continue;
-    seenStation.add(sid);
+    const realId = String(real.id);
+    if (seenStation.has(realId)) continue;
+    seenStation.add(realId);
     verifiedStations.push({
       id: real.id,
       name: real.name,
@@ -601,11 +1146,14 @@ function verifyAiRagResult(parsed, matches, stationsById) {
     });
   }
 
-  /* Fallback: if LLM returned no valid station IDs, attach verified IDs extracted from matched chunks */
-  if (!verifiedStations.length && allowedStationIds.size > 0) {
+  /* Ensure verified station IDs from top matched Gazette chunks are always included */
+  if (allowedStationIds.size > 0) {
     for (const sid of allowedStationIds) {
+      if (verifiedStations.length >= 5) break;
+      if (seenStation.has(sid)) continue;
       const real = stationsById.get(sid);
       if (!real) continue;
+      seenStation.add(sid);
       verifiedStations.push({
         id: real.id,
         name: real.name,
@@ -615,16 +1163,18 @@ function verifyAiRagResult(parsed, matches, stationsById) {
         address: real.address || '',
         note: '',
       });
-      if (verifiedStations.length >= 5) break;
     }
   }
 
-  const boundaryExceptions = Array.isArray(parsed && parsed.boundary_exceptions)
+  let boundaryExceptions = Array.isArray(parsed && parsed.boundary_exceptions)
     ? parsed.boundary_exceptions
         .map((x) => String(x || '').trim())
         .filter(Boolean)
         .slice(0, 6)
     : [];
+  if (!boundaryExceptions.length) {
+    boundaryExceptions = extractBoundaryExceptionsFromMatches(matches);
+  }
 
   const neighbors = Array.isArray(parsed && parsed.neighbors)
     ? parsed.neighbors
@@ -667,7 +1217,7 @@ async function handleAiSearch(request, env) {
     );
   }
 
-  if (!env.AI || !env.VECTORIZE) {
+  if (!env.AI) {
     return jsonResponse({
       ok: false,
       fallback: true,
@@ -688,19 +1238,43 @@ async function handleAiSearch(request, env) {
   }
 
   try {
-    const embedRes = await env.AI.run('@cf/baai/bge-m3', { text: [query] });
-    const vector = extractEmbeddingVector(embedRes);
-    if (!vector || !vector.length) {
-      return jsonResponse({
-        ok: false,
-        fallback: true,
-        reason: 'ai_error',
-        message: 'ไม่สามารถสร้างเวกเตอร์ค้นหาได้ ระบบสลับไปใช้การค้นหาในเครื่องให้อัตโนมัติ',
-      });
+    const { list: stationsList, byId } = await getStations(env, request.url);
+
+    /* 1) Built-in Gazette Lexical Retriever (fast, exact, zero-subrequest after initial cache) */
+    const lexicalMatches = await retrieveGazetteMatches(env, request.url, query, stationsList);
+    const hasStrongLexicalMatch = lexicalMatches.length > 0 && Number(lexicalMatches[0].score) >= 45;
+
+    /* 2) Optional Vectorize Semantic Retrieval (only if lexical match is weak/empty, non-fatal) */
+    let vectorMatches = [];
+    if (!hasStrongLexicalMatch && env.VECTORIZE && typeof env.VECTORIZE.query === 'function') {
+      try {
+        const embedRes = await env.AI.run('@cf/baai/bge-m3', { text: [query] });
+        const vector = extractEmbeddingVector(embedRes);
+        if (vector && vector.length) {
+          const vecRes = await env.VECTORIZE.query(vector, { topK: 5, returnMetadata: 'all' });
+          if (Array.isArray(vecRes && vecRes.matches)) {
+            vectorMatches = vecRes.matches;
+          }
+        }
+      } catch {
+        /* Proceed with lexical matches if embedding or Vectorize query fails */
+      }
     }
 
-    const vecRes = await env.VECTORIZE.query(vector, { topK: 6, returnMetadata: 'all' });
-    const matches = Array.isArray(vecRes && vecRes.matches) ? vecRes.matches : [];
+    /* Merge and deduplicate matches by doc_code:page_number (Lexical Exact Matches first) */
+    const matches = [];
+    const seenPageKey = new Set();
+    const combined = [...lexicalMatches, ...vectorMatches];
+    for (let i = 0; i < combined.length; i++) {
+      const m = combined[i];
+      const md = (m && m.metadata) || {};
+      const key = `${md.doc_code || '2567'}:${md.page_number || '?'}`;
+      if (seenPageKey.has(key)) continue;
+      seenPageKey.add(key);
+      matches.push(m);
+      if (matches.length >= 5) break;
+    }
+
     if (!matches.length) {
       return jsonResponse({
         ok: false,
@@ -730,27 +1304,22 @@ async function handleAiSearch(request, env) {
 
     const userPrompt = `คำถาม: ${query}\n\nข้อความอ้างอิงจากราชกิจจานุเบกษา:\n${contextBlocks}\n\nโปรดตอบเป็น JSON เท่านั้น:`;
 
-    const llmRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 650,
-      temperature: 0.1,
-    });
-
-    const parsed = parseLlmJson(llmRes);
-    if (!parsed) {
-      return jsonResponse({
-        ok: false,
-        fallback: true,
-        reason: 'ai_error',
-        message: 'คำตอบจาก AI ไม่อยู่ในรูปแบบที่ตรวจสอบได้ ระบบสลับไปใช้การค้นหาในเครื่องให้อัตโนมัติ',
+    let llmRes = null;
+    try {
+      llmRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 800,
+        temperature: 0.1,
       });
+    } catch {
+      /* If LLM call fails when we already have verified Gazette matches, fall through to resilient builder */
     }
 
-    const { byId } = await getStations(env, request.url);
-    const verified = verifyAiRagResult(parsed, matches, byId);
+    const parsed = buildResilientParsedLlm(llmRes, matches, stationsList);
+    const verified = verifyAiRagResult(parsed, matches, byId, stationsList);
 
     return jsonResponse({
       ok: true,
