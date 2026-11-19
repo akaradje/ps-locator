@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#05070c">
+<meta name="author" content="ผู้ช่วยพนักงานสอบสวน สภ.เมืองชุมพร">
+<title>ค้นหา สภ./สน. ใกล้ฉัน &amp; เขตอำนาจบนแผนที่ | PS Locator</title>
+<meta name="description" content="ค้นหาสถานีตำรวจ (สน./สภ.) ที่อยู่ใกล้ฉัน พร้อมตรวจสอบเขตอำนาจสอบสวนจากตำแหน่งบนแผนที่ ระบุพิกัด GPS คัดลอกพิกัด และนำทางได้ทันที | PS Locator">
+<meta name="keywords" content="สภ.ใกล้ฉัน, สถานีตำรวจใกล้ฉัน, สน.ใกล้ฉัน, ค้นหาบนแผนที่, เขตอำนาจสอบสวน, ค้นหาพิกัด, ระบุตำแหน่ง GPS, PS Locator">
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+<link rel="canonical" href="https://ps-locator.prajamwan.workers.dev/map">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="assets/styles.css">
+<script>
+(function () {
+  var t = 'dark';
+  try { t = localStorage.getItem('ps:theme') || 'dark'; } catch (e) {}
+  document.documentElement.dataset.theme = t;
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.content = t === 'light' ? '#f7f9fc' : '#05070c';
+})();
+</script>
+<meta property="og:type" content="website">
+<meta property="og:locale" content="th_TH">
+<meta property="og:site_name" content="PS Locator">
+<meta property="og:url" content="https://ps-locator.prajamwan.workers.dev/map">
+<meta property="og:title" content="ค้นหาบนแผนที่ — PS Locator">
+<meta property="og:description" content="ค้นหาสถานที่ พื้นที่ หรือพิกัดละติจูด ลองจิจูด บนแผนที่แบบโต้ตอบ พร้อม GPS และคัดลอกพิกัดได้ทันที">
+<meta property="og:image" content="https://ps-locator.prajamwan.workers.dev/assets/ps-locator-poster.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ค้นหาบนแผนที่ — PS Locator">
+<meta name="twitter:description" content="ค้นหาสถานที่ พื้นที่ หรือพิกัดละติจูด ลองจิจูด บนแผนที่แบบโต้ตอบ พร้อม GPS และคัดลอกพิกัดได้ทันที">
+<meta name="twitter:image" content="https://ps-locator.prajamwan.workers.dev/assets/ps-locator-poster.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "url": "https://ps-locator.prajamwan.workers.dev/map",
+      "name": "ค้นหาบนแผนที่ — PS Locator",
+      "inLanguage": "th",
+      "description": "ค้นหาสถานที่ พื้นที่ หรือพิกัดละติจูด ลองจิจูด บนแผนที่แบบโต้ตอบ"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "สารบบสถานีตำรวจ", "item": "https://ps-locator.prajamwan.workers.dev/" },
+        { "@type": "ListItem", "position": 2, "name": "ค้นหาบนแผนที่", "item": "https://ps-locator.prajamwan.workers.dev/map" }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body class="page-map">
+
+<noscript>
+  <div style="padding:24px; text-align:center; font-family:'Noto Sans Thai', sans-serif; background:#FDF6EC; color:#171E29">
+    <b>หน้าค้นหาบนแผนที่ต้องใช้ JavaScript</b> — กรุณาเปิดใช้ JavaScript ในเบราว์เซอร์ของคุณ
+  </div>
+</noscript>
+
+<a class="skip-link" href="#search-input">ข้ามไปยังช่องค้นหาบนแผนที่</a>
+
+<canvas id="spatial-canvas" aria-hidden="true"></canvas>
+<div class="ambient-aura" aria-hidden="true"></div>
+
+<header class="top-chrome">
+  <a class="brand-link" href="index.html" title="กลับหน้าสารบบสถานี">
+    <img class="brand-logo" src="assets/favicon.svg" width="26" height="26" alt="" aria-hidden="true">
+    <span>PS LOCATOR</span>
+  </a>
+  <div class="chrome-actions">
+    <nav class="nav-pills" aria-label="เมนูหลัก">
+      <a class="nav-pill" href="index.html">สารบบสถานี</a>
+      <a class="nav-pill" href="jurisdiction.html">เขตอำนาจ</a>
+      <a class="nav-pill" href="map.html" aria-current="page">แผนที่</a>
+    </nav>
+    <button type="button" id="theme-toggle" class="icon-pill" aria-label="สลับโหมดสีหน้าจอ" aria-pressed="true" title="สลับโหมดมืด / สว่าง">
+      <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.6 1.6"></path>
+      </svg>
+      <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="stage">
+  <div id="search-hub" class="search-hub">
+    <div class="orbital-ring" aria-hidden="true"></div>
+
+    <form id="search-form" autocomplete="off" novalidate role="search">
+      <div id="capsule-tilt" class="capsule-tilt">
+        <div id="search-capsule" class="search-capsule">
+          <div class="capsule-beam" aria-hidden="true"></div>
+          <div id="capsule-spotlight" class="capsule-spotlight" aria-hidden="true"></div>
+          <div class="scan-progress" aria-hidden="true"></div>
+
+          <span class="search-leading-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </span>
+
+          <input
+            id="search-input"
+            class="search-input"
+            type="text"
+            placeholder="ค้นหาสถานที่ ตำบล สภ./สน. หรือพิกัด เพื่อหา สภ.ใกล้ฉันและเขตอำนาจ…"
+            aria-label="ค้นหาสถานที่ พิกัด หรือ สภ.ใกล้ฉันบนแผนที่"
+            autofocus
+          >
+
+          <div class="capsule-controls">
+            <span class="kbd-hint" aria-hidden="true">/</span>
+
+            <button
+              type="button"
+              id="clear-btn"
+              class="capsule-action-btn clear-btn"
+              aria-label="ล้างคำค้นหาและกลับสู่หน้าแรก"
+              title="ล้างคำค้นหา (Esc)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              id="voice-btn"
+              class="capsule-action-btn"
+              aria-label="ค้นหาด้วยเสียง"
+              title="ค้นหาด้วยเสียง"
+              style="display:none;"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              id="gps-btn"
+              class="capsule-action-btn"
+              aria-label="ระบุตำแหน่งปัจจุบันของคุณ"
+              title="ระบุพิกัดปัจจุบัน (GPS)"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+                <circle cx="12" cy="12" r="8"></circle>
+              </svg>
+            </button>
+
+            <button
+              type="submit"
+              id="submit-btn"
+              class="submit-orb"
+              aria-label="เริ่มค้นหา"
+              title="ค้นหา (Enter)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <div id="inline-status" class="inline-status" role="status" aria-live="polite"></div>
+
+    <div class="idle-actions map-idle-actions" id="mapIdleActions" aria-label="ทางลัดค้นหาบนแผนที่">
+      <button type="button" class="idle-pill idle-pill-primary" id="idleGpsBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+          <circle cx="12" cy="12" r="8"></circle>
+        </svg>
+        หา สภ./สน. ใกล้ฉัน (GPS)
+      </button>
+      <a class="idle-pill" href="jurisdiction.html">ตรวจเขตอำนาจจากชื่อตำบล</a>
+      <a class="idle-pill" href="index.html">ค้นหาในสารบบ 1,484 สถานี</a>
+    </div>
+  </div>
+
+  <section id="results-workspace" class="results-workspace map-workspace" aria-label="ผลการค้นหาตำแหน่งและ สภ.ใกล้เคียง">
+    <div class="panel-glass results-list-panel">
+      <div class="panel-header">
+        <span id="results-label">สภ./สน. ใกล้ตำแหน่งนี้ &amp; เขตอำนาจ</span>
+        <span id="source-badge" class="source-tag">LIVE · OSM</span>
+      </div>
+      <div class="results-scroll" id="mapSideScroll">
+        <div id="mapJurBox" class="map-section" hidden></div>
+        <div id="nearbyStationsBox" class="map-section" hidden></div>
+        <div id="results-list" class="map-section"></div>
+      </div>
+    </div>
+
+    <div class="panel-glass viewport-panel">
+      <div id="locator-map" role="region" aria-label="แผนที่แบบโต้ตอบ"></div>
+      <div class="hud-overlay" aria-hidden="true">
+        <div class="hud-reticle"></div>
+      </div>
+
+      <div class="hud-top-bar">
+        <div id="active-coord-chip" class="hud-chip">LAT — · LON —</div>
+        <div class="hud-top-actions">
+          <button type="button" id="copy-coord-btn" class="hud-action-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span id="copy-coord-text">คัดลอกพิกัด</span>
+          </button>
+          <a id="open-gmaps-btn" class="hud-action-btn" href="https://www.google.com/maps" target="_blank" rel="noopener" hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span>Google Maps</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="hud-bottom-bar">
+        <span id="active-place-chip" class="hud-chip hud-place-chip">เลือกจุดหมายหรือคลิกบนแผนที่เพื่อล็อกพิกัด</span>
+        <span class="hud-attribution">© OpenStreetMap · Nominatim</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="stage-foot" aria-label="ข้อมูลเว็บไซต์และจำนวนผู้เยี่ยมชม">
+    <span class="visitor-pill" id="visitorCounter" aria-label="จำนวนผู้เยี่ยมชมเว็บไซต์">
+      <span class="visitor-label">จำนวนผู้เยี่ยมชมเว็บไซต์</span>
+      <b class="visitor-num mono" id="statViews">—</b>
+    </span>
+  </footer>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="data/stations.js"></script>
+<script src="assets/map.js"></script>
+</body>
+</html>
