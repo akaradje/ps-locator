@@ -46,8 +46,16 @@ const LEGAL_DISCLAIMER =
   'คำเตือนทางกฎหมาย: คำตอบนี้สรุปจากข้อความประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษาที่ดึงมาได้เท่านั้น ' +
   'อาจมีตำบลบางส่วน/เฉพาะหมู่ที่/แนวเขต หรือ 4 สถานีที่ถอดข้อความไม่ครบ โปรดเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมาย';
 
+const SITE_ORIGIN = 'https://ps-locator.prajamwan.workers.dev';
+const SITEMAP_LASTMOD = '2026-11-19';
+const REGION_ORDER = ['bkk', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
+const SSR_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400';
+const SITEMAP_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400';
+
 let cachedStations = null;
 let cachedStationsById = null;
+let cachedStationsByProvince = null;
+let cachedProvincesByRegion = null;
 
 function escapeXml(str) {
   return String(str ?? '')
@@ -106,27 +114,64 @@ function wrapThaiText(text, maxChars = 48, maxLines = 2) {
 }
 
 async function getStations(env, requestUrl) {
-  if (cachedStations && cachedStationsById) {
-    return { list: cachedStations, byId: cachedStationsById };
+  if (cachedStations && cachedStationsById && cachedStationsByProvince && cachedProvincesByRegion) {
+    return {
+      list: cachedStations,
+      byId: cachedStationsById,
+      byProvince: cachedStationsByProvince,
+      provincesByRegion: cachedProvincesByRegion,
+    };
   }
   try {
     const assetUrl = new URL('/data/stations.json', requestUrl);
     const res = await env.ASSETS.fetch(new Request(assetUrl.toString()));
-    if (!res || !res.ok) return { list: [], byId: new Map() };
+    if (!res || !res.ok) {
+      return { list: [], byId: new Map(), byProvince: new Map(), provincesByRegion: new Map() };
+    }
     const data = await res.json();
     const list = Array.isArray(data) ? data : [];
     const byId = new Map();
+    const byProvince = new Map();
+    const provRegion = new Map();
+
     for (let i = 0; i < list.length; i++) {
       const st = list[i];
-      if (st && st.id !== undefined && st.id !== null) {
+      if (!st) continue;
+      if (st.id !== undefined && st.id !== null) {
         byId.set(String(st.id), st);
       }
+      const prov = String(st.province_th || '').trim();
+      if (prov) {
+        let bucket = byProvince.get(prov);
+        if (!bucket) {
+          bucket = [];
+          byProvince.set(prov, bucket);
+        }
+        bucket.push(st);
+        if (!provRegion.has(prov) && st.region) {
+          provRegion.set(prov, st.region);
+        }
+      }
     }
+
+    const provincesByRegion = new Map();
+    for (const r of REGION_ORDER) provincesByRegion.set(r, []);
+    for (const [prov, bucket] of byProvince.entries()) {
+      const reg = provRegion.get(prov) || 'p1';
+      if (!provincesByRegion.has(reg)) provincesByRegion.set(reg, []);
+      provincesByRegion.get(reg).push({ province: prov, count: bucket.length });
+    }
+    for (const items of provincesByRegion.values()) {
+      items.sort((a, b) => a.province.localeCompare(b.province, 'th'));
+    }
+
     cachedStations = list;
     cachedStationsById = byId;
-    return { list, byId };
+    cachedStationsByProvince = byProvince;
+    cachedProvincesByRegion = provincesByRegion;
+    return { list, byId, byProvince, provincesByRegion };
   } catch {
-    return { list: [], byId: new Map() };
+    return { list: [], byId: new Map(), byProvince: new Map(), provincesByRegion: new Map() };
   }
 }
 
@@ -811,6 +856,676 @@ async function handleCorrectionReport(request, env) {
   }
 }
 
+function safeJsonLd(obj) {
+  return JSON.stringify(obj)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
+function sanitizeWebsiteUrl(raw) {
+  const s = String(raw || '').trim();
+  if (!s || s === '-' || s === 'ไม่มีข้อมูล') return '';
+  if (/^https?:\/\/[^\s"'<>]+$/i.test(s)) return s;
+  if (/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)+(?:\/[^\s"'<>]*)?$/i.test(s)) {
+    return 'https://' + s;
+  }
+  return '';
+}
+
+function phoneTelHref(raw) {
+  const first = String(raw || '').split(/[,/]|หรือ/)[0] || '';
+  const digits = first.replace(/[^0-9+]/g, '');
+  return digits.length >= 4 ? `tel:${digits}` : '';
+}
+
+const SSR_STYLES = `
+:root{--bg:#05070c;--surface:#0c1220;--surface2:#111a2e;--border:rgba(148,163,184,.2);--text:#f1f5f9;--muted:#94a3b8;--accent:#38bdf8;--accent-bg:rgba(56,189,248,.12);--crimson:#9f2a24;--gold:#d4af37;--warn-bg:rgba(245,158,11,.12);--warn-border:rgba(245,158,11,.42);--warn-text:#fcd34d}
+html[data-theme="light"]{--bg:#f7f9fc;--surface:#ffffff;--surface2:#f1f5f9;--border:rgba(15,23,42,.12);--text:#0f172a;--muted:#475569;--accent:#0369a1;--accent-bg:rgba(3,105,161,.08);--crimson:#7e1f1a;--gold:#9a7411;--warn-bg:#fffbeb;--warn-border:#f59e0b;--warn-text:#92400e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Sarabun',system-ui,-apple-system,sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.ssr-head{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border);backdrop-filter:blur(10px)}
+.ssr-head-in{max-width:1040px;margin:0 auto;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ssr-brand{display:inline-flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.08em;color:var(--text);text-decoration:none;font-size:.95rem}
+.ssr-nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ssr-nav a,.ssr-theme-btn{padding:6px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:.9rem;font-family:inherit;cursor:pointer;text-decoration:none}
+.ssr-nav a[aria-current="page"]{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);font-weight:600}
+.ssr-wrap{max-width:1040px;margin:0 auto;padding:24px 18px 48px}
+.ssr-bc{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.9rem;color:var(--muted);margin:0 0 18px;padding:0;list-style:none}
+.ssr-bc li::after{content:'/';margin-left:6px;opacity:.5}
+.ssr-bc li:last-child::after{content:'';margin:0}
+.ssr-bc li:last-child{color:var(--text);font-weight:600}
+.ssr-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:20px}
+.ssr-kicker{display:inline-block;padding:3px 10px;border-radius:999px;background:var(--accent-bg);border:1px solid var(--border);color:var(--accent);font-size:.82rem;font-weight:600;margin-bottom:8px}
+h1{margin:0 0 8px;font-family:'Noto Serif Thai','Sarabun',serif;font-size:clamp(1.45rem,3vw,2.05rem);line-height:1.3}
+h2{margin:0 0 12px;font-family:'Noto Serif Thai','Sarabun',serif;font-size:1.2rem}
+.ssr-sub{margin:0;color:var(--muted);font-size:1rem}
+.ssr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+.ssr-cell{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.ssr-cell.full{grid-column:1/-1}
+.ssr-cell label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:4px}
+.ssr-cell .val{font-size:1.05rem;font-weight:600;word-break:break-word}
+.ssr-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.ssr-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-weight:600;font-size:.95rem;text-decoration:none}
+.ssr-btn.primary{background:var(--accent);border-color:var(--accent);color:#04101b}
+html[data-theme="light"] .ssr-btn.primary{color:#ffffff}
+.ssr-btn:hover{filter:brightness(1.06);text-decoration:none}
+.ssr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:0;margin:0;list-style:none}
+.ssr-list a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 13px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);text-decoration:none}
+.ssr-list a:hover{border-color:var(--accent)}
+.ssr-badge{font-size:.82rem;color:var(--muted);white-space:nowrap}
+.ssr-table-wrap{overflow-x:auto}
+table.ssr-table{width:100%;border-collapse:collapse;font-size:.95rem}
+.ssr-table th,.ssr-table td{padding:11px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+.ssr-table th{color:var(--muted);font-weight:600;font-size:.86rem;white-space:nowrap}
+.ssr-warn{background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text);border-radius:12px;padding:13px 16px;font-size:.92rem;margin-top:20px}
+.ssr-foot{border-top:1px solid var(--border);padding:20px 18px;text-align:center;color:var(--muted);font-size:.88rem}
+.ssr-foot-links{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:8px}
+@media (max-width:680px){.ssr-grid{grid-template-columns:1fr}}
+`;
+
+function renderSsrLayout({
+  title,
+  description,
+  canonical,
+  ogImage,
+  jsonLd,
+  robots = 'index, follow, max-snippet:-1, max-image-preview:large',
+  currentNav = '',
+  bodyHtml,
+}) {
+  const safeTitle = escapeXml(title);
+  const safeDesc = escapeXml(description);
+  const safeCanonical = escapeXml(canonical);
+  const safeOgImage = escapeXml(ogImage || `${SITE_ORIGIN}/assets/ps-locator-poster.png`);
+  const safeRobots = escapeXml(robots);
+  const jsonLdScript = jsonLd
+    ? `<script type="application/ld+json">${safeJsonLd(jsonLd)}</script>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#05070c">
+<title>${safeTitle}</title>
+<meta name="description" content="${safeDesc}">
+<meta name="robots" content="${safeRobots}">
+<link rel="canonical" href="${safeCanonical}">
+<link rel="alternate" hreflang="th" href="${safeCanonical}">
+<link rel="alternate" hreflang="x-default" href="${safeCanonical}">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Noto+Serif+Thai:wght@600;700&display=swap" rel="stylesheet">
+<script>
+(function(){var t='dark';try{t=localStorage.getItem('ps:theme')||'dark';}catch(e){}document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#05070c':'#f7f9fc';})();
+</script>
+<meta property="og:type" content="website">
+<meta property="og:locale" content="th_TH">
+<meta property="og:site_name" content="PS Locator">
+<meta property="og:url" content="${safeCanonical}">
+<meta property="og:title" content="${safeTitle}">
+<meta property="og:description" content="${safeDesc}">
+<meta property="og:image" content="${safeOgImage}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${safeTitle}">
+<meta name="twitter:description" content="${safeDesc}">
+<meta name="twitter:image" content="${safeOgImage}">
+${jsonLdScript}
+<style>${SSR_STYLES}</style>
+</head>
+<body>
+<header class="ssr-head">
+  <div class="ssr-head-in">
+    <a class="ssr-brand" href="/">
+      <img src="/assets/favicon.svg" width="24" height="24" alt="" aria-hidden="true">
+      <span>PS LOCATOR</span>
+    </a>
+    <nav class="ssr-nav" aria-label="เมนูหลัก">
+      <a href="/"${currentNav === 'home' ? ' aria-current="page"' : ''}>สารบบสถานี</a>
+      <a href="/provinces"${currentNav === 'provinces' ? ' aria-current="page"' : ''}>77 จังหวัด</a>
+      <a href="/jurisdiction"${currentNav === 'jurisdiction' ? ' aria-current="page"' : ''}>เขตอำนาจ</a>
+      <a href="/map"${currentNav === 'map' ? ' aria-current="page"' : ''}>แผนที่</a>
+      <button type="button" id="ssrThemeBtn" class="ssr-theme-btn" aria-label="สลับโหมดสีหน้าจอ">สลับธีม</button>
+    </nav>
+  </div>
+</header>
+<main class="ssr-wrap">
+${bodyHtml}
+</main>
+<footer class="ssr-foot">
+  <div>PS Locator — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง ครบ 77 จังหวัด · ข้อมูลอ้างอิงจากสำนักงานตำรวจแห่งชาติ</div>
+  <div class="ssr-foot-links">
+    <a href="/">หน้าหลักค้นหาสถานี</a>
+    <a href="/provinces">สารบบ 77 จังหวัด</a>
+    <a href="/jurisdiction">ตรวจเขตอำนาจสอบสวน</a>
+    <a href="/map">แผนที่ สภ.ใกล้ฉัน</a>
+    <a href="/sitemap.xml">Sitemap</a>
+  </div>
+</footer>
+<script>
+(function(){var b=document.getElementById('ssrThemeBtn');if(!b)return;b.addEventListener('click',function(){var cur=document.documentElement.dataset.theme==='light'?'light':'dark';var next=cur==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('ps:theme',next);}catch(e){}var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=next==='dark'?'#05070c':'#f7f9fc';});})();
+</script>
+</body>
+</html>`;
+}
+
+function htmlResponse(html, method, status = 200, cacheControl = SSR_CACHE_CONTROL) {
+  return new Response(method === 'HEAD' ? null : html, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': status === 200 ? cacheControl : 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
+function xmlResponse(xml, method) {
+  return new Response(method === 'HEAD' ? null : xml, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Cache-Control': SITEMAP_CACHE_CONTROL,
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
+function renderNotFoundPage(method, heading, detail) {
+  const html = renderSsrLayout({
+    title: `${heading} | PS Locator`,
+    description: detail,
+    canonical: `${SITE_ORIGIN}/`,
+    robots: 'noindex, follow',
+    bodyHtml: `
+  <section class="ssr-card">
+    <span class="ssr-kicker">404 · ไม่พบหน้านี้</span>
+    <h1>${escapeXml(heading)}</h1>
+    <p class="ssr-sub">${escapeXml(detail)}</p>
+    <div class="ssr-actions">
+      <a class="ssr-btn primary" href="/">กลับหน้าหลักค้นหาสถานี</a>
+      <a class="ssr-btn" href="/provinces">ดูสารบบ 77 จังหวัด</a>
+      <a class="ssr-btn" href="/jurisdiction">ตรวจเขตอำนาจสอบสวน</a>
+    </div>
+  </section>`,
+  });
+  return htmlResponse(html, method, 404);
+}
+
+async function handleStationPage(request, env, rawId) {
+  const id = String(rawId || '').trim();
+  const { byId, byProvince } = await getStations(env, request.url);
+  const st = id ? byId.get(id) : null;
+  if (!st) {
+    return renderNotFoundPage(
+      request.method,
+      'ไม่พบข้อมูลสถานีตำรวจที่ระบุ',
+      'ไม่พบรหัสสถานีตำรวจนี้ในฐานข้อมูล 1,484 แห่งของ PS Locator กรุณาค้นหาใหม่จากหน้าหลักหรือเลือกจากสารบบ 77 จังหวัด'
+    );
+  }
+
+  const prov = String(st.province_th || '').trim();
+  const regionShort = REGION_SHORT[st.region] || '';
+  const regionFull = REGION_NAME[st.region] || regionShort || 'สำนักงานตำรวจแห่งชาติ';
+  const addrRaw = String(st.address || '').trim();
+  const phoneRaw = String(st.phone || '').trim();
+  const faxRaw = String(st.fax || '').trim();
+  const websiteSafe = sanitizeWebsiteUrl(st.website);
+
+  const addrDisplay = addrRaw || 'ไม่มีข้อมูล';
+  const phoneDisplay = phoneRaw ? formatPhone(phoneRaw) : 'ไม่มีข้อมูล';
+  const faxDisplay = faxRaw ? formatPhone(faxRaw) : 'ไม่มีข้อมูล';
+  const telHref = phoneRaw ? phoneTelHref(phoneRaw) : '';
+
+  const canonical = `${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`;
+  const provinceUrl = `${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`;
+  const ogImage = `${SITE_ORIGIN}/og?id=${encodeURIComponent(st.id)}`;
+
+  const title = `ที่อยู่ เบอร์โทร ${st.name} (${prov}) | PS Locator`;
+  const description = `${st.name} จังหวัด${prov} สังกัด${regionFull} · ที่อยู่: ${addrDisplay} · โทรศัพท์: ${phoneDisplay} · พร้อมนำทาง Google Maps และพิมพ์แนบเอกสารคดี A4`;
+
+  /* Zero Hallucination JSON-LD: omit empty fields strictly */
+  const postalAddress = {
+    '@type': 'PostalAddress',
+    addressRegion: prov,
+    addressCountry: 'TH',
+  };
+  if (addrRaw) postalAddress.streetAddress = addrRaw;
+
+  const policeNode = {
+    '@type': ['PoliceStation', 'GovernmentOffice'],
+    '@id': canonical,
+    name: st.name,
+    address: postalAddress,
+    areaServed: prov,
+  };
+  if (phoneRaw) policeNode.telephone = phoneDisplay;
+  if (faxRaw) policeNode.faxNumber = faxDisplay;
+  if (websiteSafe) policeNode.url = websiteSafe;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      policeNode,
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${SITE_ORIGIN}/` },
+          { '@type': 'ListItem', position: 2, name: '77 จังหวัด', item: `${SITE_ORIGIN}/provinces` },
+          { '@type': 'ListItem', position: 3, name: `จังหวัด${prov}`, item: provinceUrl },
+          { '@type': 'ListItem', position: 4, name: st.name, item: canonical },
+        ],
+      },
+    ],
+  };
+
+  const sameProvince = (byProvince.get(prov) || [])
+    .filter((s) => String(s.id) !== String(st.id))
+    .slice(0, 12);
+
+  const relatedHtml = sameProvince.length
+    ? `<section class="ssr-card">
+    <h2>สถานีตำรวจอื่นในจังหวัด${escapeXml(prov)}</h2>
+    <ul class="ssr-list">
+      ${sameProvince
+        .map(
+          (s) =>
+            `<li><a href="/station/${encodeURIComponent(s.id)}"><span>${escapeXml(s.name)}</span><span class="ssr-badge">${escapeXml(s.phone ? formatPhone(s.phone) : 'ดูข้อมูล')}</span></a></li>`
+        )
+        .join('\n      ')}
+    </ul>
+    <div class="ssr-actions">
+      <a class="ssr-btn" href="/province/${encodeURIComponent(prov)}">ดูครบทุกสถานีในจังหวัด${escapeXml(prov)}</a>
+      <a class="ssr-btn" href="/provinces">ดูสารบบ 77 จังหวัด</a>
+    </div>
+  </section>`
+    : '';
+
+  const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${st.name} ${prov}`)}`;
+  const phoneHtml = telHref
+    ? `<a href="${escapeXml(telHref)}">${escapeXml(phoneDisplay)}</a>`
+    : escapeXml(phoneDisplay);
+  const websiteHtml = websiteSafe
+    ? `<a href="${escapeXml(websiteSafe)}" target="_blank" rel="noopener nofollow">${escapeXml(websiteSafe)}</a>`
+    : 'ไม่มีข้อมูล';
+
+  const bodyHtml = `
+  <nav aria-label="เส้นทางหน้า">
+    <ol class="ssr-bc">
+      <li><a href="/">สารบบสถานีตำรวจ</a></li>
+      <li><a href="/provinces">77 จังหวัด</a></li>
+      <li><a href="/province/${encodeURIComponent(prov)}">จังหวัด${escapeXml(prov)}</a></li>
+      <li aria-current="page">${escapeXml(st.name)}</li>
+    </ol>
+  </nav>
+
+  <article class="ssr-card">
+    <span class="ssr-kicker">${escapeXml(regionShort ? `${regionShort} · ${regionFull}` : regionFull)}</span>
+    <h1>${escapeXml(st.name)}</h1>
+    <p class="ssr-sub">จังหวัด${escapeXml(prov)} · สารบบสถานีตำรวจทั่วประเทศ สำนักงานตำรวจแห่งชาติ</p>
+
+    <div class="ssr-grid">
+      <div class="ssr-cell full">
+        <label>ที่อยู่สถานี</label>
+        <div class="val">${escapeXml(addrDisplay)}</div>
+      </div>
+      <div class="ssr-cell">
+        <label>หมายเลขโทรศัพท์</label>
+        <div class="val">${phoneHtml}</div>
+      </div>
+      <div class="ssr-cell">
+        <label>โทรสาร (แฟกซ์)</label>
+        <div class="val">${escapeXml(faxDisplay)}</div>
+      </div>
+      <div class="ssr-cell">
+        <label>จังหวัด</label>
+        <div class="val"><a href="/province/${encodeURIComponent(prov)}">จังหวัด${escapeXml(prov)}</a></div>
+      </div>
+      <div class="ssr-cell">
+        <label>กองบัญชาการ</label>
+        <div class="val">${escapeXml(regionFull)}</div>
+      </div>
+      <div class="ssr-cell full">
+        <label>เว็บไซต์ทางการ</label>
+        <div class="val">${websiteHtml}</div>
+      </div>
+    </div>
+
+    <div class="ssr-actions">
+      <a class="ssr-btn primary" href="/?id=${encodeURIComponent(st.id)}">เปิดในแอปหลัก / พิมพ์ A4</a>
+      <a class="ssr-btn" href="${escapeXml(gmapsUrl)}" target="_blank" rel="noopener">นำทาง Google Maps</a>
+      <a class="ssr-btn" href="/jurisdiction?j=${encodeURIComponent(st.name)}">ตรวจเขตอำนาจสอบสวน</a>
+      <a class="ssr-btn" href="/map?q=${encodeURIComponent(`${st.name} ${prov}`)}">ค้นหาบนแผนที่</a>
+    </div>
+
+    <div class="ssr-warn" role="note">
+      <strong>คำเตือนทางกฎหมาย:</strong> ข้อมูลนี้รวบรวมจากฐานข้อมูลสาธารณะของสำนักงานตำรวจแห่งชาติ เพื่ออำนวยความสะดวกในการค้นหาเบื้องต้น โปรดยืนยันที่อยู่ เบอร์โทรศัพท์ และเขตอำนาจสอบสวนกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมายหรือส่งเอกสารทางคดี
+    </div>
+  </article>
+
+  ${relatedHtml}`;
+
+  const html = renderSsrLayout({
+    title,
+    description,
+    canonical,
+    ogImage,
+    jsonLd,
+    bodyHtml,
+  });
+  return htmlResponse(html, request.method, 200);
+}
+
+async function handleProvincePage(request, env, rawProv) {
+  let prov;
+  try {
+    prov = decodeURIComponent(String(rawProv || '')).trim();
+  } catch {
+    return renderNotFoundPage(
+      request.method,
+      'รูปแบบชื่อจังหวัดไม่ถูกต้อง',
+      'ไม่สามารถอ่านชื่อจังหวัดจาก URL ได้ กรุณาเลือกจังหวัดจากหน้าสารบบ 77 จังหวัด'
+    );
+  }
+
+  const { byProvince, provincesByRegion } = await getStations(env, request.url);
+  const list = prov ? byProvince.get(prov) : null;
+  if (!list || !list.length) {
+    return renderNotFoundPage(
+      request.method,
+      'ไม่พบข้อมูลจังหวัดที่ระบุ',
+      'ไม่พบรายชื่อจังหวัดนี้ในสารบบสถานีตำรวจ 77 จังหวัด กรุณาเลือกจังหวัดจากรายการด้านล่าง'
+    );
+  }
+
+  const regionCode = list[0].region || '';
+  const regionFull = REGION_NAME[regionCode] || REGION_SHORT[regionCode] || 'สำนักงานตำรวจแห่งชาติ';
+  const canonical = `${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`;
+  const title = `สถานีตำรวจจังหวัด${prov} (${list.length} แห่ง) — ที่อยู่ เบอร์โทร สภ./สน. | PS Locator`;
+  const description = `รวมรายชื่อสถานีตำรวจในจังหวัด${prov} ครบ ${list.length} แห่ง สังกัด${regionFull} พร้อมที่อยู่ เบอร์โทรศัพท์ โทรสาร แผนที่นำทาง และตรวจเขตอำนาจสอบสวน`;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        url: canonical,
+        name: title,
+        inLanguage: 'th',
+        description,
+      },
+      {
+        '@type': 'ItemList',
+        name: `รายชื่อสถานีตำรวจจังหวัด${prov}`,
+        numberOfItems: list.length,
+        itemListElement: list.map((st, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: st.name,
+          url: `${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`,
+        })),
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${SITE_ORIGIN}/` },
+          { '@type': 'ListItem', position: 2, name: '77 จังหวัด', item: `${SITE_ORIGIN}/provinces` },
+          { '@type': 'ListItem', position: 3, name: `จังหวัด${prov}`, item: canonical },
+        ],
+      },
+    ],
+  };
+
+  const rowsHtml = list
+    .map((st, idx) => {
+      const addr = String(st.address || '').trim() || 'ไม่มีข้อมูล';
+      const phoneRaw = String(st.phone || '').trim();
+      const phoneDisplay = phoneRaw ? formatPhone(phoneRaw) : 'ไม่มีข้อมูล';
+      const telHref = phoneRaw ? phoneTelHref(phoneRaw) : '';
+      const phoneCell = telHref
+        ? `<a href="${escapeXml(telHref)}">${escapeXml(phoneDisplay)}</a>`
+        : escapeXml(phoneDisplay);
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td><a href="/station/${encodeURIComponent(st.id)}"><strong>${escapeXml(st.name)}</strong></a></td>
+        <td>${escapeXml(addr)}</td>
+        <td style="white-space:nowrap">${phoneCell}</td>
+      </tr>`;
+    })
+    .join('\n      ');
+
+  const siblingProvinces = (provincesByRegion.get(regionCode) || []).filter((p) => p.province !== prov);
+  const siblingsHtml = siblingProvinces.length
+    ? `<section class="ssr-card">
+    <h2>จังหวัดอื่นในสังกัด${escapeXml(regionFull)}</h2>
+    <ul class="ssr-list">
+      ${siblingProvinces
+        .map(
+          (p) =>
+            `<li><a href="/province/${encodeURIComponent(p.province)}"><span>จังหวัด${escapeXml(p.province)}</span><span class="ssr-badge">${p.count} แห่ง</span></a></li>`
+        )
+        .join('\n      ')}
+    </ul>
+  </section>`
+    : '';
+
+  const bodyHtml = `
+  <nav aria-label="เส้นทางหน้า">
+    <ol class="ssr-bc">
+      <li><a href="/">สารบบสถานีตำรวจ</a></li>
+      <li><a href="/provinces">77 จังหวัด</a></li>
+      <li aria-current="page">จังหวัด${escapeXml(prov)}</li>
+    </ol>
+  </nav>
+
+  <section class="ssr-card">
+    <span class="ssr-kicker">${escapeXml(regionFull)}</span>
+    <h1>สถานีตำรวจจังหวัด${escapeXml(prov)} (${list.length} แห่ง)</h1>
+    <p class="ssr-sub">รายชื่อ ที่อยู่ และเบอร์โทรศัพท์ สภ./สน. ครบทุกแห่งในจังหวัด${escapeXml(prov)} คลิกชื่อสถานีเพื่อดูรายละเอียด แผนที่ และพิมพ์เอกสาร A4</p>
+    <div class="ssr-actions">
+      <a class="ssr-btn primary" href="/?province=${encodeURIComponent(prov)}">เปิดกรองจังหวัด${escapeXml(prov)}ในแอปหลัก</a>
+      <a class="ssr-btn" href="/jurisdiction?j=${encodeURIComponent(prov)}">ตรวจเขตอำนาจจังหวัด${escapeXml(prov)}</a>
+      <a class="ssr-btn" href="/provinces">ดูครบ 77 จังหวัด</a>
+    </div>
+  </section>
+
+  <section class="ssr-card">
+    <h2>บัญชีรายชื่อสถานีตำรวจจังหวัด${escapeXml(prov)}</h2>
+    <div class="ssr-table-wrap">
+      <table class="ssr-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>ชื่อสถานีตำรวจ</th>
+            <th>ที่อยู่</th>
+            <th>โทรศัพท์</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  ${siblingsHtml}`;
+
+  const html = renderSsrLayout({
+    title,
+    description,
+    canonical,
+    jsonLd,
+    bodyHtml,
+  });
+  return htmlResponse(html, request.method, 200);
+}
+
+async function handleProvincesPage(request, env) {
+  const { list, byProvince, provincesByRegion } = await getStations(env, request.url);
+  const canonical = `${SITE_ORIGIN}/provinces`;
+  const title = `สารบบสถานีตำรวจ 77 จังหวัด (${list.length.toLocaleString('th-TH')} แห่ง) | PS Locator`;
+  const description = `รวมรายชื่อสถานีตำรวจทั่วประเทศไทยครบทั้ง 77 จังหวัด ${list.length} แห่ง จัดกลุ่มตาม 10 กองบัญชาการ (บช.น. และ ภ.1–ภ.9) พร้อมที่อยู่และเบอร์โทรศัพท์`;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        url: canonical,
+        name: title,
+        inLanguage: 'th',
+        description,
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${SITE_ORIGIN}/` },
+          { '@type': 'ListItem', position: 2, name: 'สารบบ 77 จังหวัด', item: canonical },
+        ],
+      },
+    ],
+  };
+
+  const sectionsHtml = REGION_ORDER.map((reg) => {
+    const provs = provincesByRegion.get(reg) || [];
+    if (!provs.length) return '';
+    const regTotal = provs.reduce((sum, p) => sum + p.count, 0);
+    const items = provs
+      .map(
+        (p) =>
+          `<li><a href="/province/${encodeURIComponent(p.province)}"><span>${escapeXml(p.province)}</span><span class="ssr-badge">${p.count} สถานี</span></a></li>`
+      )
+      .join('\n      ');
+    return `<section class="ssr-card">
+    <h2>${escapeXml(REGION_NAME[reg] || reg)} (${escapeXml(REGION_SHORT[reg] || reg)}) · ${provs.length} จังหวัด · ${regTotal} แห่ง</h2>
+    <ul class="ssr-list">
+      ${items}
+    </ul>
+  </section>`;
+  })
+    .filter(Boolean)
+    .join('\n  ');
+
+  const bodyHtml = `
+  <nav aria-label="เส้นทางหน้า">
+    <ol class="ssr-bc">
+      <li><a href="/">สารบบสถานีตำรวจ</a></li>
+      <li aria-current="page">สารบบ 77 จังหวัด</li>
+    </ol>
+  </nav>
+
+  <section class="ssr-card">
+    <span class="ssr-kicker">HTML Sitemap · 10 กองบัญชาการ</span>
+    <h1>สารบบสถานีตำรวจครบ 77 จังหวัด (${list.length.toLocaleString('th-TH')} แห่ง)</h1>
+    <p class="ssr-sub">เลือกจังหวัดเพื่อดูรายชื่อ ที่อยู่ และเบอร์โทรศัพท์ของ สภ./สน. ครบทั้ง ${byProvince.size} จังหวัดทั่วประเทศไทย</p>
+    <div class="ssr-actions">
+      <a class="ssr-btn primary" href="/">ค้นหาสถานีแบบรวดเร็ว</a>
+      <a class="ssr-btn" href="/jurisdiction">ตรวจเขตอำนาจจากชื่อตำบล</a>
+      <a class="ssr-btn" href="/map">ค้นหา สภ.ใกล้ฉันบนแผนที่</a>
+    </div>
+  </section>
+
+  ${sectionsHtml}`;
+
+  const html = renderSsrLayout({
+    title,
+    description,
+    canonical,
+    jsonLd,
+    currentNav: 'provinces',
+    bodyHtml,
+  });
+  return htmlResponse(html, request.method, 200);
+}
+
+function handleSitemapIndex(request) {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${SITE_ORIGIN}/sitemap-core.xml</loc>
+    <lastmod>${SITEMAP_LASTMOD}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${SITE_ORIGIN}/sitemap-provinces.xml</loc>
+    <lastmod>${SITEMAP_LASTMOD}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${SITE_ORIGIN}/sitemap-stations.xml</loc>
+    <lastmod>${SITEMAP_LASTMOD}</lastmod>
+  </sitemap>
+</sitemapindex>`;
+  return xmlResponse(xml, request.method);
+}
+
+function handleSitemapCore(request) {
+  const entries = [
+    { loc: `${SITE_ORIGIN}/`, changefreq: 'weekly', priority: '1.0' },
+    { loc: `${SITE_ORIGIN}/jurisdiction`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${SITE_ORIGIN}/map`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${SITE_ORIGIN}/provinces`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${SITE_ORIGIN}/qr-poster.html`, changefreq: 'monthly', priority: '0.5' },
+  ];
+  const body = entries
+    .map(
+      (e) => `  <url>
+    <loc>${escapeXml(e.loc)}</loc>
+    <lastmod>${SITEMAP_LASTMOD}</lastmod>
+    <changefreq>${e.changefreq}</changefreq>
+    <priority>${e.priority}</priority>
+  </url>`
+    )
+    .join('\n');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${body}
+</urlset>`;
+  return xmlResponse(xml, request.method);
+}
+
+async function handleSitemapProvinces(request, env) {
+  const { byProvince } = await getStations(env, request.url);
+  const provinces = Array.from(byProvince.keys()).sort((a, b) => a.localeCompare(b, 'th'));
+  const body = provinces
+    .map(
+      (prov) => `  <url>
+    <loc>${escapeXml(`${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`)}</loc>
+    <lastmod>${SITEMAP_LASTMOD}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>`
+    )
+    .join('\n');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${body}
+</urlset>`;
+  return xmlResponse(xml, request.method);
+}
+
+async function handleSitemapStations(request, env) {
+  const { list } = await getStations(env, request.url);
+  const body = list
+    .map(
+      (st) => `  <url>
+    <loc>${escapeXml(`${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`)}</loc>
+    <lastmod>${SITEMAP_LASTMOD}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+    )
+    .join('\n');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${body}
+</urlset>`;
+  return xmlResponse(xml, request.method);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -871,6 +1586,44 @@ export default {
         return new Response('Method Not Allowed', { status: 405 });
       }
       return handleOgRequest(request, env, url);
+    }
+
+    if (
+      url.pathname === '/sitemap.xml' ||
+      url.pathname === '/sitemap-core.xml' ||
+      url.pathname === '/sitemap-provinces.xml' ||
+      url.pathname === '/sitemap-stations.xml'
+    ) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method Not Allowed', { status: 405 });
+      }
+      if (url.pathname === '/sitemap.xml') return handleSitemapIndex(request);
+      if (url.pathname === '/sitemap-core.xml') return handleSitemapCore(request);
+      if (url.pathname === '/sitemap-provinces.xml') return handleSitemapProvinces(request, env);
+      return handleSitemapStations(request, env);
+    }
+
+    if (url.pathname === '/provinces' || url.pathname === '/provinces/') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method Not Allowed', { status: 405 });
+      }
+      return handleProvincesPage(request, env);
+    }
+
+    if (url.pathname.startsWith('/province/')) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method Not Allowed', { status: 405 });
+      }
+      const rawProv = url.pathname.slice('/province/'.length).replace(/\/+$/, '');
+      return handleProvincePage(request, env, rawProv);
+    }
+
+    if (url.pathname.startsWith('/station/')) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method Not Allowed', { status: 405 });
+      }
+      const rawId = url.pathname.slice('/station/'.length).replace(/\/+$/, '');
+      return handleStationPage(request, env, rawId);
     }
 
     if (

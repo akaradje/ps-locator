@@ -10,6 +10,8 @@
 <meta name="keywords" content="สถานีตำรวจ, ค้นหาสถานีตำรวจ, ที่อยู่ สน., ที่อยู่ สภ., เบอร์โทรสถานีตำรวจ, สารบบสถานีตำรวจ, สถานีตำรวจทั่วประเทศ, 77 จังหวัด, สำนักงานตำรวจแห่งชาติ, พนักงานสอบสวน, เขตอำนาจสอบสวน, PS Locator">
 <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
 <link rel="canonical" href="https://ps-locator.prajamwan.workers.dev/">
+<link rel="alternate" hreflang="th" href="https://ps-locator.prajamwan.workers.dev/">
+<link rel="alternate" hreflang="x-default" href="https://ps-locator.prajamwan.workers.dev/">
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -74,6 +76,35 @@
         "name": "สำนักงานตำรวจแห่งชาติ",
         "url": "https://www.royalthaipolice.go.th/th/police-stations"
       }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "ค้นหาเบอร์โทรและที่อยู่สถานีตำรวจใกล้ฉันได้อย่างไร?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "พิมพ์ชื่อสถานีตำรวจ (สน./สภ.) จังหวัด หรือหมายเลขโทรศัพท์ในช่องค้นหาหน้าแรก หรือเปิดหน้าแผนที่ (/map) เพื่อใช้ GPS ค้นหาสถานีตำรวจที่ใกล้ตำแหน่งปัจจุบันที่สุดพร้อมปุ่มกดโทรและนำทาง Google Maps"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "ตรวจสอบเขตอำนาจสอบสวนจากชื่อตำบลได้อย่างไร?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ไปที่หน้าเขตอำนาจ (/jurisdiction) แล้วพิมพ์ชื่อตำบลหรือแขวงที่เกิดเหตุ ระบบจะแสดง สภ./สน. ผู้รับผิดชอบ รายชื่อตำบลในเขต เขตเพื่อนบ้าน และเลขหน้าประกาศในราชกิจจานุเบกษา"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "ข้อมูลสถานีตำรวจใน PS Locator อ้างอิงจากแหล่งใด?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ข้อมูลสถานีตำรวจ 1,484 แห่ง ครบ 77 จังหวัด อ้างอิงจากฐานข้อมูลสาธารณะของสำนักงานตำรวจแห่งชาติ (royalthaipolice.go.th) และข้อมูลเขตอำนาจสอบสวนถอดข้อความจากประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษา"
+          }
+        }
+      ]
     }
   ]
 }
@@ -229,6 +260,7 @@
       <span class="visitor-label">จำนวนผู้เยี่ยมชมเว็บไซต์</span>
       <b class="visitor-num mono" id="statViews">—</b>
     </span>
+    <a href="/provinces">สารบบ 77 จังหวัด</a>
     <a href="data/stations.json" download="ps-locator-stations.json">ดาวน์โหลด JSON</a>
     <a href="qr-poster.html">โปสเตอร์ QR</a>
     <a href="https://github.com/akaradje/ps-locator" target="_blank" rel="noopener">GitHub</a>

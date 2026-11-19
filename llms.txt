@@ -1,0 +1,21 @@
+# PS Locator — สารบบสถานีตำรวจทั่วประเทศ (Thailand Police Station Directory)
+
+> Official-source directory of all 1,484 Royal Thai Police stations (สน./สภ.) across 77 provinces and 10 regional bureaus (บช.น., ภ.1–ภ.9), plus subdistrict-level investigative jurisdiction lookup derived from the Royal Thai Government Gazette.
+
+## ขอบเขตข้อมูล (Data Coverage)
+- **สถานีตำรวจทั่วประเทศ (Police Stations):** 1,484 แห่ง ครบทั้ง 77 จังหวัด 10 กองบัญชาการ อ้างอิงข้อมูลสาธารณะจากสำนักงานตำรวจแห่งชาติ (`royalthaipolice.go.th`)
+- **เขตอำนาจสอบสวน (Investigative Jurisdiction):** ดัชนีค้นหา สภ./สน. ผู้รับผิดชอบจากชื่อตำบล/แขวง ถอดข้อความจากประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษา (ลงวันที่ 22 มีนาคม 2567 และฉบับที่ 2 ลงวันที่ 22 ตุลาคม 2568)
+- **แผนที่และสถานีใกล้ฉัน (Interactive Map & Nearest Station):** ค้นหา สภ./สน. ใกล้ตำแหน่งปัจจุบัน (GPS) พร้อมพิกัดและเส้นทางนำทาง
+
+## โครงสร้าง URL หลัก (Canonical URL Patterns)
+- `https://ps-locator.prajamwan.workers.dev/` — หน้าหลักค้นหาสถานีตำรวจ 1,484 แห่ง (รองรับ `?q=`, `?province=`, `?region=`, `?id=`)
+- `https://ps-locator.prajamwan.workers.dev/provinces` — สารบบ 77 จังหวัดจัดกลุ่มตาม 10 กองบัญชาการ (HTML Sitemap)
+- `https://ps-locator.prajamwan.workers.dev/province/{province_th}` — รายชื่อสถานีตำรวจครบทุกแห่งในจังหวัดที่ระบุ (เช่น `/province/ชุมพร`)
+- `https://ps-locator.prajamwan.workers.dev/station/{id}` — หน้าข้อมูลรายสถานี (ที่อยู่, โทรศัพท์, โทรสาร, เว็บไซต์ทางการ, สังกัดกองบัญชาการ, JSON-LD `PoliceStation`)
+- `https://ps-locator.prajamwan.workers.dev/jurisdiction` — ตรวจสอบเขตอำนาจสอบสวนจากชื่อตำบล/แขวง และค้นหาประกาศฉบับเต็ม (รองรับ `?j=`)
+- `https://ps-locator.prajamwan.workers.dev/map` — แผนที่ค้นหา สภ./สน. ใกล้ฉันและตรวจสอบเขตอำนาจตามพิกัด
+- `https://ps-locator.prajamwan.workers.dev/sitemap.xml` — Dynamic Sitemap Index (1,566+ URLs)
+
+## หลักความถูกต้องและข้อจำกัดทางกฎหมาย (Accuracy & Legal Disclaimer)
+- **Zero Hallucination:** ฟิลด์ที่ต้นทางไม่มีข้อมูล (45 สถานี) จะแสดง "ไม่มีข้อมูล" โดยไม่แต่งเติมหรือคาดเดา
+- **Legal Notice:** ข้อมูลเขตอำนาจสอบสวนถอดข้อความจากไฟล์ PDF ราชกิจจานุเบกษา (มี 4 สถานีที่ถอดข้อความไม่ครบ และบางพื้นที่เป็นเขตบางส่วน/เฉพาะหมู่ที่/แนวเขต) โปรดตรวจสอบประกาศราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนใช้ดำเนินการทางกฎหมายหรือส่งเอกสารทางคดี

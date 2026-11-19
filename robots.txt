@@ -1,5 +1,11 @@
 User-agent: *
 Allow: /
+Allow: /station/
+Allow: /province/
+Allow: /provinces
+Allow: /jurisdiction
+Allow: /map
+Allow: /llms.txt
 Disallow: /api/
 
 Sitemap: https://ps-locator.prajamwan.workers.dev/sitemap.xml

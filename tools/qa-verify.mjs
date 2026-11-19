@@ -143,9 +143,10 @@ function checkDataIntegrity() {
   }
 }
 
-/* 4) Internal Links Check */
+/* 4) Internal Links & SEO Files Check */
 function checkInternalLinks() {
   const htmlFiles = ['index.html', 'jurisdiction.html', 'map.html', 'qr-poster.html'];
+  const workerRoutes = new Set(['/provinces', '/jurisdiction', '/map', '/sitemap.xml', '/llms.txt']);
   const missing = [];
   let checked = 0;
 
@@ -176,6 +177,13 @@ function checkInternalLinks() {
       const cleanPath = raw.split('#')[0].split('?')[0];
       if (!cleanPath) continue;
       checked++;
+      if (
+        workerRoutes.has(cleanPath) ||
+        cleanPath.startsWith('/station/') ||
+        cleanPath.startsWith('/province/')
+      ) {
+        continue;
+      }
       const target = cleanPath.startsWith('/')
         ? path.join(ROOT, cleanPath.slice(1))
         : path.resolve(path.dirname(abs), cleanPath);
@@ -185,10 +193,34 @@ function checkInternalLinks() {
     }
   }
 
-  if (!missing.length) {
-    record('4. Internal Links Check', true, `ตรวจ ${checked} ลิงก์ภายในใน ${htmlFiles.length} หน้า HTML ครบถ้วน`);
+  /* Verify robots.txt and llms.txt */
+  const robotsPath = path.join(ROOT, 'robots.txt');
+  const llmsPath = path.join(ROOT, 'llms.txt');
+  if (!fs.existsSync(robotsPath)) {
+    missing.push('ไม่พบ robots.txt');
   } else {
-    record('4. Internal Links Check', false, `ไม่พบปลายทาง: ${missing.join(', ')}`);
+    const robotsTxt = fs.readFileSync(robotsPath, 'utf8');
+    if (!robotsTxt.includes('Sitemap:') || !robotsTxt.includes('Disallow: /api/')) {
+      missing.push('robots.txt ขาด Sitemap หรือ Disallow: /api/');
+    }
+  }
+  if (!fs.existsSync(llmsPath)) {
+    missing.push('ไม่พบ llms.txt');
+  } else {
+    const llmsTxt = fs.readFileSync(llmsPath, 'utf8').trim();
+    if (llmsTxt.length < 100) {
+      missing.push('llms.txt สั้นผิดปกติ');
+    }
+  }
+
+  if (!missing.length) {
+    record(
+      '4. Internal Links & SEO Files Check',
+      true,
+      `ตรวจ ${checked} ลิงก์ภายในใน ${htmlFiles.length} หน้า HTML + robots.txt + llms.txt ครบถ้วน`
+    );
+  } else {
+    record('4. Internal Links & SEO Files Check', false, `พบปัญหา: ${missing.join(', ')}`);
   }
 }
 
