@@ -49,25 +49,168 @@ const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/** Normalize Thai text for forgiving search: NFC + strip สน./สภ. prefixes + strip punctuation/whitespace */
+/** Normalize Thai text for exact-first search: NFC + strip สน./สภ./สภ.อ. prefixes + strip punctuation/whitespace */
 function norm(s) {
   return String(s ?? '')
     .normalize('NFC')
     .toLowerCase()
     .replace(/สถานีตำรวจ/g, '')
-    .replace(/สน\.|สภ\./g, '')
+    .replace(/สภ\.อ\.|สน\.|สภ\./g, '')
     .replace(/[\s\-‐-―.,()\/\\]+/g, '');
 }
 
-/* Precomputed normalized haystack per station (built once at boot). */
+/** Fold Thai diacritics, garun (พยัญชนะ+ทัณฑฆาต), and commonly swapped chars (ฎ/ฏ) for fuzzy fallback only */
+function foldThai(s) {
+  return String(s ?? '')
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[ก-ฮ][\u0E34-\u0E3A]?\u0E4C/g, '')
+    .replace(/[\u0E47-\u0E4E]/g, '')
+    .replace(/ฏ/g, 'ฎ');
+}
+
+/* Official Thai police abbreviations & administrative prefixes */
+const ABBR_REGION_MAP = Object.freeze({
+  'กทม': 'bkk', 'บชน': 'bkk', 'นครบาล': 'bkk', 'bkk': 'bkk',
+  'ภ1': 'p1', 'ภาค1': 'p1', 'ภูธรภาค1': 'p1', 'p1': 'p1',
+  'ภ2': 'p2', 'ภาค2': 'p2', 'ภูธรภาค2': 'p2', 'p2': 'p2',
+  'ภ3': 'p3', 'ภาค3': 'p3', 'ภูธรภาค3': 'p3', 'p3': 'p3',
+  'ภ4': 'p4', 'ภาค4': 'p4', 'ภูธรภาค4': 'p4', 'p4': 'p4',
+  'ภ5': 'p5', 'ภาค5': 'p5', 'ภูธรภาค5': 'p5', 'p5': 'p5',
+  'ภ6': 'p6', 'ภาค6': 'p6', 'ภูธรภาค6': 'p6', 'p6': 'p6',
+  'ภ7': 'p7', 'ภาค7': 'p7', 'ภูธรภาค7': 'p7', 'p7': 'p7',
+  'ภ8': 'p8', 'ภาค8': 'p8', 'ภูธรภาค8': 'p8', 'p8': 'p8',
+  'ภ9': 'p9', 'ภาค9': 'p9', 'ภูธรภาค9': 'p9', 'p9': 'p9',
+});
+
+const ABBR_EXPAND_MAP = Object.freeze({
+  'กทม': 'กรุงเทพมหานคร',
+  'กรุงเทพ': 'กรุงเทพมหานคร',
+  'บชน': 'กรุงเทพมหานคร',
+  'bkk': 'กรุงเทพมหานคร',
+  'นครบาล': 'กรุงเทพมหานคร',
+});
+
+const REGION_ALIASES = Object.freeze({
+  bkk: ['กทม', 'บชน', 'bkk', 'นครบาล', 'กรุงเทพ', 'กรุงเทพมหานคร'],
+  p1: ['ภ1', 'p1', 'ภาค1', 'ภูธรภาค1'],
+  p2: ['ภ2', 'p2', 'ภาค2', 'ภูธรภาค2'],
+  p3: ['ภ3', 'p3', 'ภาค3', 'ภูธรภาค3'],
+  p4: ['ภ4', 'p4', 'ภาค4', 'ภูธรภาค4'],
+  p5: ['ภ5', 'p5', 'ภาค5', 'ภูธรภาค5'],
+  p6: ['ภ6', 'p6', 'ภาค6', 'ภูธรภาค6'],
+  p7: ['ภ7', 'p7', 'ภาค7', 'ภูธรภาค7'],
+  p8: ['ภ8', 'p8', 'ภาค8', 'ภูธรภาค8'],
+  p9: ['ภ9', 'p9', 'ภาค9', 'ภูธรภาค9'],
+});
+
+/* Single Intl.Segmenter instance reused across boot and queries (with whitespace fallback) */
+const TH_SEGMENTER = (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function')
+  ? new Intl.Segmenter('th', { granularity: 'word' })
+  : null;
+
+function stripAdminPrefix(s) {
+  return String(s ?? '').replace(/^(?:สภ\.อ\.|สภ\.|สน\.|จว\.|ต\.|อ\.|ถ\.|ซ\.)/u, '');
+}
+
+function segmentWords(raw) {
+  const text = String(raw ?? '').normalize('NFC').trim();
+  if (!text) return [];
+  const out = [];
+  if (TH_SEGMENTER) {
+    for (const seg of TH_SEGMENTER.segment(text)) {
+      if (!seg.isWordLike) continue;
+      const w = norm(stripAdminPrefix(seg.segment));
+      if (w.length >= 2) out.push(w);
+    }
+  } else {
+    for (const part of text.split(/\s+/)) {
+      const w = norm(stripAdminPrefix(part));
+      if (w.length >= 2) out.push(w);
+    }
+  }
+  return out;
+}
+
+/* Pre-allocated buffers for bounded Damerau-Levenshtein (avoids per-call allocations) */
+let _dlPrev2 = new Int32Array(64);
+let _dlPrev1 = new Int32Array(64);
+let _dlCurr  = new Int32Array(64);
+
+/** Bounded Damerau-Levenshtein distance with length and row-min early exit */
+function boundedDL(a, b, maxDist) {
+  const al = a.length, bl = b.length;
+  if (a === b) return 0;
+  if (Math.abs(al - bl) > maxDist) return maxDist + 1;
+  if (al === 0) return bl <= maxDist ? bl : maxDist + 1;
+  if (bl === 0) return al <= maxDist ? al : maxDist + 1;
+
+  if (bl + 1 > _dlCurr.length) {
+    const sz = Math.max(bl + 1, _dlCurr.length * 2);
+    _dlPrev2 = new Int32Array(sz);
+    _dlPrev1 = new Int32Array(sz);
+    _dlCurr  = new Int32Array(sz);
+  }
+  let p2 = _dlPrev2, p1 = _dlPrev1, cur = _dlCurr;
+  for (let j = 0; j <= bl; j++) p1[j] = j;
+
+  for (let i = 1; i <= al; i++) {
+    cur[0] = i;
+    let rowMin = i;
+    const ai = a.charCodeAt(i - 1);
+    for (let j = 1; j <= bl; j++) {
+      const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
+      let val = p1[j] + 1;
+      const ins = cur[j - 1] + 1;
+      if (ins < val) val = ins;
+      const sub = p1[j - 1] + cost;
+      if (sub < val) val = sub;
+      if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === b.charCodeAt(j - 1)) {
+        const trans = p2[j - 2] + 1;
+        if (trans < val) val = trans;
+      }
+      cur[j] = val;
+      if (val < rowMin) rowMin = val;
+    }
+    if (rowMin > maxDist) return maxDist + 1;
+    const tmp = p2; p2 = p1; p1 = cur; cur = tmp;
+  }
+  return p1[bl] <= maxDist ? p1[bl] : maxDist + 1;
+}
+
+/* Precomputed normalized + segmented + folded haystack per station (built once at boot). */
 const HAY = new Map();
 for (const st of STATIONS) {
+  const name = norm(st.name);
+  const addr = norm(st.address);
+  const prov = norm(st.province_th);
+  const phone = norm(st.phone);
+  const region = norm(REGION_SHORT[st.region] || '');
+  const aliases = REGION_ALIASES[st.region] || [];
+  const aliasStr = aliases.join('|');
+  const tokSet = new Set();
+  for (const w of segmentWords(st.name + ' ' + st.province_th)) tokSet.add(w);
+  const tokens = [...tokSet];
+  const foldedTokSet = new Set();
+  for (const w of tokens) {
+    const fw = foldThai(w);
+    if (fw.length >= 3) foldedTokSet.add(fw);
+  }
+  const tokensFold = [...foldedTokSet];
   HAY.set(st.id, {
-    name: norm(st.name),
-    addr: norm(st.address),
-    prov: norm(st.province_th),
-    phone: norm(st.phone),
-    region: norm(REGION_SHORT[st.region] || ''),
+    name,
+    addr,
+    prov,
+    phone,
+    region,
+    regionId: st.region || '',
+    aliasStr,
+    nameProv: name + '|' + prov + '|' + region + '|' + aliasStr,
+    full: name + '|' + prov + '|' + addr + '|' + phone + '|' + region + '|' + aliasStr,
+    nameFold: foldThai(name),
+    provFold: foldThai(prov),
+    tokens,
+    tokensFold,
   });
 }
 
@@ -77,32 +220,195 @@ const PROVINCES = (() => {
   return [...m.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, 'th'));
 })();
 
-function stationMatches(st, qNorm) {
-  if (!qNorm) return true;
+/** Prepare parsed query context once per search (reused across all 1,484 stations) */
+function prepareQuery(raw) {
+  const rawTrim = String(raw ?? '').normalize('NFC').trim();
+  const stripped = rawTrim.split(/\s+/).map(stripAdminPrefix).join(' ').trim();
+  const qNorm = norm(stripped || rawTrim);
+  if (!qNorm) return null;
+
+  const qFold = foldThai(qNorm);
+  const regionId = ABBR_REGION_MAP[qNorm] || '';
+  const expanded = ABBR_EXPAND_MAP[qNorm] || '';
+
+  /* Multi-token exact terms: prefer whitespace-split tokens, else Intl.Segmenter words */
+  const wsParts = rawTrim.split(/\s+/).filter(Boolean);
+  const hasSpaces = wsParts.length >= 2;
+  let rawTokens = [];
+  if (hasSpaces) {
+    for (const p of wsParts) {
+      const t = norm(stripAdminPrefix(p));
+      if (t) rawTokens.push(t);
+    }
+  } else {
+    const segs = segmentWords(stripped || rawTrim);
+    if (segs.length >= 2) rawTokens = segs;
+  }
+
+  const tokens = rawTokens.length >= 2
+    ? rawTokens.map(t => ({
+        raw: t,
+        regionId: ABBR_REGION_MAP[t] || '',
+        expanded: ABBR_EXPAND_MAP[t] || '',
+      }))
+    : [];
+
+  const maxDist = qNorm.length >= 7 ? 2 : (qNorm.length >= 4 ? 1 : 0);
+  const maxDistFold = qFold.length >= 7 ? 2 : (qFold.length >= 4 ? 1 : 0);
+
+  return { rawTrim, qNorm, qFold, regionId, expanded, tokens, hasSpaces, maxDist, maxDistFold };
+}
+
+/**
+ * Strict Exact-First scoring for a station:
+ *  Tier 0 (0-1): Exact / Prefix match on station name
+ *  Tier 1 (2-6): Exact substring match (name -> province -> address -> phone/region/abbr)
+ *  Tier 2 (7-8): Multi-token exact match across name/province/address/region/abbr
+ *  Tier 3 (10+): Fuzzy fallback (Thai diacritic/garun folding + bounded Damerau-Levenshtein)
+ *  Returns -1 when no match.
+ */
+function scoreStation(st, qCtx) {
+  if (!qCtx) return 0;
   const h = HAY.get(st.id);
-  return h.name.includes(qNorm) || h.addr.includes(qNorm) || h.prov.includes(qNorm) || h.phone.includes(qNorm) || h.region.includes(qNorm);
+  if (!h) return -1;
+  const { qNorm, qFold, regionId, expanded, tokens, hasSpaces, maxDist, maxDistFold } = qCtx;
+
+  /* Tier 0: Exact / Prefix on station name */
+  if (h.name === qNorm) return 0;
+  if (h.name.startsWith(qNorm)) return 1;
+
+  /* Tier 1: Exact substring & official abbreviation match */
+  if (h.name.includes(qNorm)) return 2;
+  if (h.prov === qNorm || h.prov.startsWith(qNorm)) return 3;
+  if (h.prov.includes(qNorm)) return 4;
+  if (h.addr.includes(qNorm)) return 5;
+  if (
+    h.phone.includes(qNorm) ||
+    h.region === qNorm ||
+    h.region.includes(qNorm) ||
+    (regionId && h.regionId === regionId) ||
+    (expanded && (h.prov.includes(expanded) || h.aliasStr.includes(qNorm)))
+  ) return 6;
+
+  /* Tier 2: Multi-token exact match (e.g. "เมือง ชุมพร", "บางรัก กทม") */
+  if (tokens.length >= 2) {
+    let allInNameProv = true;
+    let allInFull = true;
+    for (let i = 0; i < tokens.length; i++) {
+      const tk = tokens[i];
+      const inNP = h.nameProv.includes(tk.raw) ||
+        (tk.regionId && h.regionId === tk.regionId) ||
+        (tk.expanded && h.prov.includes(tk.expanded));
+      if (!inNP) {
+        allInNameProv = false;
+        if (!hasSpaces) { allInFull = false; break; }
+        const inFull = h.addr.includes(tk.raw) || h.phone.includes(tk.raw);
+        if (!inFull) { allInFull = false; break; }
+      }
+    }
+    if (allInFull) return allInNameProv ? 7 : 8;
+  }
+
+  /* Tier 3: Fuzzy & typo-tolerant fallback (only when qNorm.length >= 3) */
+  if (qNorm.length >= 3) {
+    /* 3A: Diacritic / garun / ฎ-ฏ folding */
+    if (qFold.length >= 3) {
+      if (h.nameFold === qFold) return 10;
+      if (h.nameFold.startsWith(qFold)) return 11;
+      if (h.nameFold.includes(qFold)) return 12;
+      if (h.provFold.includes(qFold)) return 13;
+    }
+
+    /* 3B: Bounded Damerau-Levenshtein (4-6 chars: maxDist 1, >=7 chars: maxDist 2) */
+    if (maxDist > 0) {
+      const qLen = qNorm.length;
+      const qfLen = qFold.length;
+      const qDiffFold = qFold !== qNorm;
+
+      if (Math.abs(qLen - h.name.length) <= maxDist) {
+        const dName = boundedDL(qNorm, h.name, maxDist);
+        if (dName <= maxDist) return 14 + dName;
+      }
+      if (maxDistFold > 0 && (qDiffFold || h.nameFold !== h.name) && Math.abs(qfLen - h.nameFold.length) <= maxDistFold) {
+        const dNameF = boundedDL(qFold, h.nameFold, maxDistFold);
+        if (dNameF <= maxDistFold) return 14 + dNameF;
+      }
+
+      if (Math.abs(qLen - h.prov.length) <= maxDist) {
+        const dProv = boundedDL(qNorm, h.prov, maxDist);
+        if (dProv <= maxDist) return 17 + dProv;
+      }
+      if (maxDistFold > 0 && (qDiffFold || h.provFold !== h.prov) && Math.abs(qfLen - h.provFold.length) <= maxDistFold) {
+        const dProvF = boundedDL(qFold, h.provFold, maxDistFold);
+        if (dProvF <= maxDistFold) return 17 + dProvF;
+      }
+
+      for (let i = 0; i < h.tokens.length; i++) {
+        const tok = h.tokens[i];
+        if (Math.abs(qLen - tok.length) <= maxDist) {
+          const dTok = boundedDL(qNorm, tok, maxDist);
+          if (dTok <= maxDist) return 20 + dTok;
+        }
+      }
+      if (maxDistFold > 0 && qDiffFold) {
+        for (let i = 0; i < h.tokensFold.length; i++) {
+          const tokF = h.tokensFold[i];
+          if (Math.abs(qfLen - tokF.length) <= maxDistFold) {
+            const dTokF = boundedDL(qFold, tokF, maxDistFold);
+            if (dTokF <= maxDistFold) return 20 + dTokF;
+          }
+        }
+      }
+    }
+  }
+
+  return -1;
+}
+
+function stationMatches(st, qOrCtx) {
+  if (!qOrCtx) return true;
+  const ctx = typeof qOrCtx === 'string' ? prepareQuery(qOrCtx) : qOrCtx;
+  if (!ctx) return true;
+  return scoreStation(st, ctx) >= 0;
+}
+
+function compareBySort(a, b) {
+  switch (state.sort) {
+    case 'name':
+      return a.name.localeCompare(b.name, 'th');
+    case 'province':
+      return a.province_th.localeCompare(b.province_th, 'th') || a.name.localeCompare(b.name, 'th');
+    case 'region':
+    default:
+      return (REGION_ORDER[a.region] - REGION_ORDER[b.region]) ||
+        a.province_th.localeCompare(b.province_th, 'th') ||
+        a.name.localeCompare(b.name, 'th');
+  }
 }
 
 function getFiltered() {
-  const qNorm = norm(state.q);
-  const list = STATIONS.filter(st =>
-    stationMatches(st, qNorm) &&
-    (!state.province || st.province_th === state.province) &&
-    (state.region === 'all' || st.region === state.region) &&
-    (!state.savedOnly || state.saved.has(st.id))
-  );
-  switch (state.sort) {
-    case 'name':
-      list.sort((a, b) => a.name.localeCompare(b.name, 'th'));
-      break;
-    case 'province':
-      list.sort((a, b) => a.province_th.localeCompare(b.province_th, 'th') || a.name.localeCompare(b.name, 'th'));
-      break;
-    case 'region':
-    default:
-      list.sort((a, b) => (REGION_ORDER[a.region] - REGION_ORDER[b.region]) || a.province_th.localeCompare(b.province_th, 'th') || a.name.localeCompare(b.name, 'th'));
+  const qCtx = prepareQuery(state.q);
+  if (!qCtx) {
+    const list = STATIONS.filter(st =>
+      (!state.province || st.province_th === state.province) &&
+      (state.region === 'all' || st.region === state.region) &&
+      (!state.savedOnly || state.saved.has(st.id))
+    );
+    list.sort(compareBySort);
+    return list;
   }
-  return list;
+  const scored = [];
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
+    if (state.province && st.province_th !== state.province) continue;
+    if (state.region !== 'all' && st.region !== state.region) continue;
+    if (state.savedOnly && !state.saved.has(st.id)) continue;
+    const sc = scoreStation(st, qCtx);
+    if (sc >= 0) scored.push({ st, sc });
+  }
+  /* Strict Exact-First: sort by tier bucket (Exact/Token < 10 before Fuzzy >= 10), then exact score, then state.sort */
+  scored.sort((a, b) => a.sc - b.sc || compareBySort(a.st, b.st));
+  return scored.map(x => x.st);
 }
 
 function formatPhoneDisplay(p) {
@@ -117,18 +423,58 @@ const mapsEmbed = (st) => 'https://www.google.com/maps?q=' + encodeURIComponent(
 
 function hl(text, qRaw) {
   const t = String(text ?? '');
-  const needle = String(qRaw ?? '').trim().toLowerCase();
-  if (!needle) return esc(t);
+  const raw = String(qRaw ?? '').trim();
+  if (!raw) return esc(t);
   const lower = t.toLowerCase();
+
+  const needles = [];
+  const seen = new Set();
+  const pushNeedle = (s) => {
+    const n = String(s ?? '').trim().toLowerCase();
+    if (!n || seen.has(n)) return;
+    seen.add(n);
+    needles.push(n);
+  };
+  pushNeedle(raw);
+  const parts = raw.split(/\s+/).filter(Boolean);
+  for (const p of parts) {
+    const clean = stripAdminPrefix(p).trim();
+    if (clean.length >= 2) pushNeedle(clean);
+    const exp = ABBR_EXPAND_MAP[norm(clean)];
+    if (exp) pushNeedle(exp);
+  }
+  if (parts.length === 1) {
+    for (const w of segmentWords(raw)) {
+      if (w.length >= 2) pushNeedle(w);
+    }
+  }
+
   const ranges = [];
-  let idx = lower.indexOf(needle);
-  while (idx !== -1 && ranges.length < 12) {
-    ranges.push([idx, idx + needle.length]);
-    idx = lower.indexOf(needle, idx + needle.length);
+  for (const needle of needles) {
+    let idx = lower.indexOf(needle);
+    let count = 0;
+    while (idx !== -1 && count < 8 && ranges.length < 24) {
+      ranges.push([idx, idx + needle.length]);
+      idx = lower.indexOf(needle, idx + needle.length);
+      count++;
+    }
   }
   if (!ranges.length) return esc(t);
+
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged = [ranges[0]];
+  for (let i = 1; i < ranges.length; i++) {
+    const prev = merged[merged.length - 1];
+    const cur = ranges[i];
+    if (cur[0] <= prev[1]) {
+      if (cur[1] > prev[1]) prev[1] = cur[1];
+    } else {
+      merged.push(cur);
+    }
+  }
+
   let out = '', pos = 0;
-  for (const [a, b] of ranges) {
+  for (const [a, b] of merged) {
     out += esc(t.slice(pos, a)) + '<mark>' + esc(t.slice(a, b)) + '</mark>';
     pos = b;
   }
@@ -523,22 +869,17 @@ function setProvince(v) {
 let sugState = { items: [], active: -1, total: 0 };
 
 function getSuggestions(raw) {
-  const qn = norm(raw);
-  if (!qn) return { items: [], total: 0 };
+  const qCtx = prepareQuery(raw);
+  if (!qCtx) return { items: [], total: 0 };
   const scored = [];
-  let total = 0;
-  for (const st of STATIONS) {
-    const h = HAY.get(st.id);
-    let score = -1;
-    if (h.name.startsWith(qn)) score = 0;
-    else if (h.name.includes(qn)) score = 1;
-    else if (h.prov.includes(qn)) score = 2;
-    else if (h.addr.includes(qn)) score = 3;
-    else if (h.phone.includes(qn) || h.region.includes(qn)) score = 4;
-    if (score >= 0) { scored.push({ st, score }); total++; }
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
+    const score = scoreStation(st, qCtx);
+    if (score >= 0) scored.push({ st, score });
   }
+  /* Strict Exact-First: Tier 0-2 (< 10) always rank above Fuzzy Tier 3 (>= 10) */
   scored.sort((a, b) => a.score - b.score || a.st.name.localeCompare(b.st.name, 'th'));
-  return { items: scored.slice(0, 8), total };
+  return { items: scored.slice(0, 8), total: scored.length };
 }
 
 function renderSuggest(raw) {
@@ -603,11 +944,12 @@ function scanStart() {
 }
 
 function regionCounts() {
-  const qn = norm(state.q);
+  const qCtx = prepareQuery(state.q);
   const counts = { all: 0 };
   for (const r of REGIONS) if (r.id !== 'all') counts[r.id] = 0;
-  for (const st of STATIONS) {
-    if (!stationMatches(st, qn)) continue;
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
+    if (qCtx && scoreStation(st, qCtx) < 0) continue;
     if (state.province && st.province_th !== state.province) continue;
     if (state.savedOnly && !state.saved.has(st.id)) continue;
     counts.all++;
