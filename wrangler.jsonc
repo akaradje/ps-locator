@@ -5,6 +5,7 @@
   "compatibility_date": "2026-11-17",
   "account_id": "74451318eb3c73358e60351ee92691e5",
   "assets": {
+    "directory": ".",
     "binding": "ASSETS"
   },
   "d1_databases": [
