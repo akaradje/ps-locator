@@ -49,25 +49,168 @@ const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/** Normalize Thai text for forgiving search: NFC + strip สน./สภ. prefixes + strip punctuation/whitespace */
+/** Normalize Thai text for exact-first search: NFC + strip สน./สภ./สภ.อ. prefixes + strip punctuation/whitespace */
 function norm(s) {
   return String(s ?? '')
     .normalize('NFC')
     .toLowerCase()
     .replace(/สถานีตำรวจ/g, '')
-    .replace(/สน\.|สภ\./g, '')
+    .replace(/สภ\.อ\.|สน\.|สภ\./g, '')
     .replace(/[\s\-‐-―.,()\/\\]+/g, '');
 }
 
-/* Precomputed normalized haystack per station (built once at boot). */
+/** Fold Thai diacritics, garun (พยัญชนะ+ทัณฑฆาต), and commonly swapped chars (ฎ/ฏ) for fuzzy fallback only */
+function foldThai(s) {
+  return String(s ?? '')
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[ก-ฮ][\u0E34-\u0E3A]?\u0E4C/g, '')
+    .replace(/[\u0E47-\u0E4E]/g, '')
+    .replace(/ฏ/g, 'ฎ');
+}
+
+/* Official Thai police abbreviations & administrative prefixes */
+const ABBR_REGION_MAP = Object.freeze({
+  'กทม': 'bkk', 'บชน': 'bkk', 'นครบาล': 'bkk', 'bkk': 'bkk',
+  'ภ1': 'p1', 'ภาค1': 'p1', 'ภูธรภาค1': 'p1', 'p1': 'p1',
+  'ภ2': 'p2', 'ภาค2': 'p2', 'ภูธรภาค2': 'p2', 'p2': 'p2',
+  'ภ3': 'p3', 'ภาค3': 'p3', 'ภูธรภาค3': 'p3', 'p3': 'p3',
+  'ภ4': 'p4', 'ภาค4': 'p4', 'ภูธรภาค4': 'p4', 'p4': 'p4',
+  'ภ5': 'p5', 'ภาค5': 'p5', 'ภูธรภาค5': 'p5', 'p5': 'p5',
+  'ภ6': 'p6', 'ภาค6': 'p6', 'ภูธรภาค6': 'p6', 'p6': 'p6',
+  'ภ7': 'p7', 'ภาค7': 'p7', 'ภูธรภาค7': 'p7', 'p7': 'p7',
+  'ภ8': 'p8', 'ภาค8': 'p8', 'ภูธรภาค8': 'p8', 'p8': 'p8',
+  'ภ9': 'p9', 'ภาค9': 'p9', 'ภูธรภาค9': 'p9', 'p9': 'p9',
+});
+
+const ABBR_EXPAND_MAP = Object.freeze({
+  'กทม': 'กรุงเทพมหานคร',
+  'กรุงเทพ': 'กรุงเทพมหานคร',
+  'บชน': 'กรุงเทพมหานคร',
+  'bkk': 'กรุงเทพมหานคร',
+  'นครบาล': 'กรุงเทพมหานคร',
+});
+
+const REGION_ALIASES = Object.freeze({
+  bkk: ['กทม', 'บชน', 'bkk', 'นครบาล', 'กรุงเทพ', 'กรุงเทพมหานคร'],
+  p1: ['ภ1', 'p1', 'ภาค1', 'ภูธรภาค1'],
+  p2: ['ภ2', 'p2', 'ภาค2', 'ภูธรภาค2'],
+  p3: ['ภ3', 'p3', 'ภาค3', 'ภูธรภาค3'],
+  p4: ['ภ4', 'p4', 'ภาค4', 'ภูธรภาค4'],
+  p5: ['ภ5', 'p5', 'ภาค5', 'ภูธรภาค5'],
+  p6: ['ภ6', 'p6', 'ภาค6', 'ภูธรภาค6'],
+  p7: ['ภ7', 'p7', 'ภาค7', 'ภูธรภาค7'],
+  p8: ['ภ8', 'p8', 'ภาค8', 'ภูธรภาค8'],
+  p9: ['ภ9', 'p9', 'ภาค9', 'ภูธรภาค9'],
+});
+
+/* Single Intl.Segmenter instance reused across boot and queries (with whitespace fallback) */
+const TH_SEGMENTER = (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function')
+  ? new Intl.Segmenter('th', { granularity: 'word' })
+  : null;
+
+function stripAdminPrefix(s) {
+  return String(s ?? '').replace(/^(?:สภ\.อ\.|สภ\.|สน\.|จว\.|ต\.|อ\.|ถ\.|ซ\.)/u, '');
+}
+
+function segmentWords(raw) {
+  const text = String(raw ?? '').normalize('NFC').trim();
+  if (!text) return [];
+  const out = [];
+  if (TH_SEGMENTER) {
+    for (const seg of TH_SEGMENTER.segment(text)) {
+      if (!seg.isWordLike) continue;
+      const w = norm(stripAdminPrefix(seg.segment));
+      if (w.length >= 2) out.push(w);
+    }
+  } else {
+    for (const part of text.split(/\s+/)) {
+      const w = norm(stripAdminPrefix(part));
+      if (w.length >= 2) out.push(w);
+    }
+  }
+  return out;
+}
+
+/* Pre-allocated buffers for bounded Damerau-Levenshtein (avoids per-call allocations) */
+let _dlPrev2 = new Int32Array(64);
+let _dlPrev1 = new Int32Array(64);
+let _dlCurr  = new Int32Array(64);
+
+/** Bounded Damerau-Levenshtein distance with length and row-min early exit */
+function boundedDL(a, b, maxDist) {
+  const al = a.length, bl = b.length;
+  if (a === b) return 0;
+  if (Math.abs(al - bl) > maxDist) return maxDist + 1;
+  if (al === 0) return bl <= maxDist ? bl : maxDist + 1;
+  if (bl === 0) return al <= maxDist ? al : maxDist + 1;
+
+  if (bl + 1 > _dlCurr.length) {
+    const sz = Math.max(bl + 1, _dlCurr.length * 2);
+    _dlPrev2 = new Int32Array(sz);
+    _dlPrev1 = new Int32Array(sz);
+    _dlCurr  = new Int32Array(sz);
+  }
+  let p2 = _dlPrev2, p1 = _dlPrev1, cur = _dlCurr;
+  for (let j = 0; j <= bl; j++) p1[j] = j;
+
+  for (let i = 1; i <= al; i++) {
+    cur[0] = i;
+    let rowMin = i;
+    const ai = a.charCodeAt(i - 1);
+    for (let j = 1; j <= bl; j++) {
+      const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
+      let val = p1[j] + 1;
+      const ins = cur[j - 1] + 1;
+      if (ins < val) val = ins;
+      const sub = p1[j - 1] + cost;
+      if (sub < val) val = sub;
+      if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === b.charCodeAt(j - 1)) {
+        const trans = p2[j - 2] + 1;
+        if (trans < val) val = trans;
+      }
+      cur[j] = val;
+      if (val < rowMin) rowMin = val;
+    }
+    if (rowMin > maxDist) return maxDist + 1;
+    const tmp = p2; p2 = p1; p1 = cur; cur = tmp;
+  }
+  return p1[bl] <= maxDist ? p1[bl] : maxDist + 1;
+}
+
+/* Precomputed normalized + segmented + folded haystack per station (built once at boot). */
 const HAY = new Map();
 for (const st of STATIONS) {
+  const name = norm(st.name);
+  const addr = norm(st.address);
+  const prov = norm(st.province_th);
+  const phone = norm(st.phone);
+  const region = norm(REGION_SHORT[st.region] || '');
+  const aliases = REGION_ALIASES[st.region] || [];
+  const aliasStr = aliases.join('|');
+  const tokSet = new Set();
+  for (const w of segmentWords(st.name + ' ' + st.province_th)) tokSet.add(w);
+  const tokens = [...tokSet];
+  const foldedTokSet = new Set();
+  for (const w of tokens) {
+    const fw = foldThai(w);
+    if (fw.length >= 3) foldedTokSet.add(fw);
+  }
+  const tokensFold = [...foldedTokSet];
   HAY.set(st.id, {
-    name: norm(st.name),
-    addr: norm(st.address),
-    prov: norm(st.province_th),
-    phone: norm(st.phone),
-    region: norm(REGION_SHORT[st.region] || ''),
+    name,
+    addr,
+    prov,
+    phone,
+    region,
+    regionId: st.region || '',
+    aliasStr,
+    nameProv: name + '|' + prov + '|' + region + '|' + aliasStr,
+    full: name + '|' + prov + '|' + addr + '|' + phone + '|' + region + '|' + aliasStr,
+    nameFold: foldThai(name),
+    provFold: foldThai(prov),
+    tokens,
+    tokensFold,
   });
 }
 
@@ -77,32 +220,195 @@ const PROVINCES = (() => {
   return [...m.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, 'th'));
 })();
 
-function stationMatches(st, qNorm) {
-  if (!qNorm) return true;
+/** Prepare parsed query context once per search (reused across all 1,484 stations) */
+function prepareQuery(raw) {
+  const rawTrim = String(raw ?? '').normalize('NFC').trim();
+  const stripped = rawTrim.split(/\s+/).map(stripAdminPrefix).join(' ').trim();
+  const qNorm = norm(stripped || rawTrim);
+  if (!qNorm) return null;
+
+  const qFold = foldThai(qNorm);
+  const regionId = ABBR_REGION_MAP[qNorm] || '';
+  const expanded = ABBR_EXPAND_MAP[qNorm] || '';
+
+  /* Multi-token exact terms: prefer whitespace-split tokens, else Intl.Segmenter words */
+  const wsParts = rawTrim.split(/\s+/).filter(Boolean);
+  const hasSpaces = wsParts.length >= 2;
+  let rawTokens = [];
+  if (hasSpaces) {
+    for (const p of wsParts) {
+      const t = norm(stripAdminPrefix(p));
+      if (t) rawTokens.push(t);
+    }
+  } else {
+    const segs = segmentWords(stripped || rawTrim);
+    if (segs.length >= 2) rawTokens = segs;
+  }
+
+  const tokens = rawTokens.length >= 2
+    ? rawTokens.map(t => ({
+        raw: t,
+        regionId: ABBR_REGION_MAP[t] || '',
+        expanded: ABBR_EXPAND_MAP[t] || '',
+      }))
+    : [];
+
+  const maxDist = qNorm.length >= 7 ? 2 : (qNorm.length >= 4 ? 1 : 0);
+  const maxDistFold = qFold.length >= 7 ? 2 : (qFold.length >= 4 ? 1 : 0);
+
+  return { rawTrim, qNorm, qFold, regionId, expanded, tokens, hasSpaces, maxDist, maxDistFold };
+}
+
+/**
+ * Strict Exact-First scoring for a station:
+ *  Tier 0 (0-1): Exact / Prefix match on station name
+ *  Tier 1 (2-6): Exact substring match (name -> province -> address -> phone/region/abbr)
+ *  Tier 2 (7-8): Multi-token exact match across name/province/address/region/abbr
+ *  Tier 3 (10+): Fuzzy fallback (Thai diacritic/garun folding + bounded Damerau-Levenshtein)
+ *  Returns -1 when no match.
+ */
+function scoreStation(st, qCtx) {
+  if (!qCtx) return 0;
   const h = HAY.get(st.id);
-  return h.name.includes(qNorm) || h.addr.includes(qNorm) || h.prov.includes(qNorm) || h.phone.includes(qNorm) || h.region.includes(qNorm);
+  if (!h) return -1;
+  const { qNorm, qFold, regionId, expanded, tokens, hasSpaces, maxDist, maxDistFold } = qCtx;
+
+  /* Tier 0: Exact / Prefix on station name */
+  if (h.name === qNorm) return 0;
+  if (h.name.startsWith(qNorm)) return 1;
+
+  /* Tier 1: Exact substring & official abbreviation match */
+  if (h.name.includes(qNorm)) return 2;
+  if (h.prov === qNorm || h.prov.startsWith(qNorm)) return 3;
+  if (h.prov.includes(qNorm)) return 4;
+  if (h.addr.includes(qNorm)) return 5;
+  if (
+    h.phone.includes(qNorm) ||
+    h.region === qNorm ||
+    h.region.includes(qNorm) ||
+    (regionId && h.regionId === regionId) ||
+    (expanded && (h.prov.includes(expanded) || h.aliasStr.includes(qNorm)))
+  ) return 6;
+
+  /* Tier 2: Multi-token exact match (e.g. "เมือง ชุมพร", "บางรัก กทม") */
+  if (tokens.length >= 2) {
+    let allInNameProv = true;
+    let allInFull = true;
+    for (let i = 0; i < tokens.length; i++) {
+      const tk = tokens[i];
+      const inNP = h.nameProv.includes(tk.raw) ||
+        (tk.regionId && h.regionId === tk.regionId) ||
+        (tk.expanded && h.prov.includes(tk.expanded));
+      if (!inNP) {
+        allInNameProv = false;
+        if (!hasSpaces) { allInFull = false; break; }
+        const inFull = h.addr.includes(tk.raw) || h.phone.includes(tk.raw);
+        if (!inFull) { allInFull = false; break; }
+      }
+    }
+    if (allInFull) return allInNameProv ? 7 : 8;
+  }
+
+  /* Tier 3: Fuzzy & typo-tolerant fallback (only when qNorm.length >= 3) */
+  if (qNorm.length >= 3) {
+    /* 3A: Diacritic / garun / ฎ-ฏ folding */
+    if (qFold.length >= 3) {
+      if (h.nameFold === qFold) return 10;
+      if (h.nameFold.startsWith(qFold)) return 11;
+      if (h.nameFold.includes(qFold)) return 12;
+      if (h.provFold.includes(qFold)) return 13;
+    }
+
+    /* 3B: Bounded Damerau-Levenshtein (4-6 chars: maxDist 1, >=7 chars: maxDist 2) */
+    if (maxDist > 0) {
+      const qLen = qNorm.length;
+      const qfLen = qFold.length;
+      const qDiffFold = qFold !== qNorm;
+
+      if (Math.abs(qLen - h.name.length) <= maxDist) {
+        const dName = boundedDL(qNorm, h.name, maxDist);
+        if (dName <= maxDist) return 14 + dName;
+      }
+      if (maxDistFold > 0 && (qDiffFold || h.nameFold !== h.name) && Math.abs(qfLen - h.nameFold.length) <= maxDistFold) {
+        const dNameF = boundedDL(qFold, h.nameFold, maxDistFold);
+        if (dNameF <= maxDistFold) return 14 + dNameF;
+      }
+
+      if (Math.abs(qLen - h.prov.length) <= maxDist) {
+        const dProv = boundedDL(qNorm, h.prov, maxDist);
+        if (dProv <= maxDist) return 17 + dProv;
+      }
+      if (maxDistFold > 0 && (qDiffFold || h.provFold !== h.prov) && Math.abs(qfLen - h.provFold.length) <= maxDistFold) {
+        const dProvF = boundedDL(qFold, h.provFold, maxDistFold);
+        if (dProvF <= maxDistFold) return 17 + dProvF;
+      }
+
+      for (let i = 0; i < h.tokens.length; i++) {
+        const tok = h.tokens[i];
+        if (Math.abs(qLen - tok.length) <= maxDist) {
+          const dTok = boundedDL(qNorm, tok, maxDist);
+          if (dTok <= maxDist) return 20 + dTok;
+        }
+      }
+      if (maxDistFold > 0 && qDiffFold) {
+        for (let i = 0; i < h.tokensFold.length; i++) {
+          const tokF = h.tokensFold[i];
+          if (Math.abs(qfLen - tokF.length) <= maxDistFold) {
+            const dTokF = boundedDL(qFold, tokF, maxDistFold);
+            if (dTokF <= maxDistFold) return 20 + dTokF;
+          }
+        }
+      }
+    }
+  }
+
+  return -1;
+}
+
+function stationMatches(st, qOrCtx) {
+  if (!qOrCtx) return true;
+  const ctx = typeof qOrCtx === 'string' ? prepareQuery(qOrCtx) : qOrCtx;
+  if (!ctx) return true;
+  return scoreStation(st, ctx) >= 0;
+}
+
+function compareBySort(a, b) {
+  switch (state.sort) {
+    case 'name':
+      return a.name.localeCompare(b.name, 'th');
+    case 'province':
+      return a.province_th.localeCompare(b.province_th, 'th') || a.name.localeCompare(b.name, 'th');
+    case 'region':
+    default:
+      return (REGION_ORDER[a.region] - REGION_ORDER[b.region]) ||
+        a.province_th.localeCompare(b.province_th, 'th') ||
+        a.name.localeCompare(b.name, 'th');
+  }
 }
 
 function getFiltered() {
-  const qNorm = norm(state.q);
-  const list = STATIONS.filter(st =>
-    stationMatches(st, qNorm) &&
-    (!state.province || st.province_th === state.province) &&
-    (state.region === 'all' || st.region === state.region) &&
-    (!state.savedOnly || state.saved.has(st.id))
-  );
-  switch (state.sort) {
-    case 'name':
-      list.sort((a, b) => a.name.localeCompare(b.name, 'th'));
-      break;
-    case 'province':
-      list.sort((a, b) => a.province_th.localeCompare(b.province_th, 'th') || a.name.localeCompare(b.name, 'th'));
-      break;
-    case 'region':
-    default:
-      list.sort((a, b) => (REGION_ORDER[a.region] - REGION_ORDER[b.region]) || a.province_th.localeCompare(b.province_th, 'th') || a.name.localeCompare(b.name, 'th'));
+  const qCtx = prepareQuery(state.q);
+  if (!qCtx) {
+    const list = STATIONS.filter(st =>
+      (!state.province || st.province_th === state.province) &&
+      (state.region === 'all' || st.region === state.region) &&
+      (!state.savedOnly || state.saved.has(st.id))
+    );
+    list.sort(compareBySort);
+    return list;
   }
-  return list;
+  const scored = [];
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
+    if (state.province && st.province_th !== state.province) continue;
+    if (state.region !== 'all' && st.region !== state.region) continue;
+    if (state.savedOnly && !state.saved.has(st.id)) continue;
+    const sc = scoreStation(st, qCtx);
+    if (sc >= 0) scored.push({ st, sc });
+  }
+  /* Strict Exact-First: sort by tier bucket (Exact/Token < 10 before Fuzzy >= 10), then exact score, then state.sort */
+  scored.sort((a, b) => a.sc - b.sc || compareBySort(a.st, b.st));
+  return scored.map(x => x.st);
 }
 
 function formatPhoneDisplay(p) {
@@ -117,18 +423,58 @@ const mapsEmbed = (st) => 'https://www.google.com/maps?q=' + encodeURIComponent(
 
 function hl(text, qRaw) {
   const t = String(text ?? '');
-  const needle = String(qRaw ?? '').trim().toLowerCase();
-  if (!needle) return esc(t);
+  const raw = String(qRaw ?? '').trim();
+  if (!raw) return esc(t);
   const lower = t.toLowerCase();
+
+  const needles = [];
+  const seen = new Set();
+  const pushNeedle = (s) => {
+    const n = String(s ?? '').trim().toLowerCase();
+    if (!n || seen.has(n)) return;
+    seen.add(n);
+    needles.push(n);
+  };
+  pushNeedle(raw);
+  const parts = raw.split(/\s+/).filter(Boolean);
+  for (const p of parts) {
+    const clean = stripAdminPrefix(p).trim();
+    if (clean.length >= 2) pushNeedle(clean);
+    const exp = ABBR_EXPAND_MAP[norm(clean)];
+    if (exp) pushNeedle(exp);
+  }
+  if (parts.length === 1) {
+    for (const w of segmentWords(raw)) {
+      if (w.length >= 2) pushNeedle(w);
+    }
+  }
+
   const ranges = [];
-  let idx = lower.indexOf(needle);
-  while (idx !== -1 && ranges.length < 12) {
-    ranges.push([idx, idx + needle.length]);
-    idx = lower.indexOf(needle, idx + needle.length);
+  for (const needle of needles) {
+    let idx = lower.indexOf(needle);
+    let count = 0;
+    while (idx !== -1 && count < 8 && ranges.length < 24) {
+      ranges.push([idx, idx + needle.length]);
+      idx = lower.indexOf(needle, idx + needle.length);
+      count++;
+    }
   }
   if (!ranges.length) return esc(t);
+
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged = [ranges[0]];
+  for (let i = 1; i < ranges.length; i++) {
+    const prev = merged[merged.length - 1];
+    const cur = ranges[i];
+    if (cur[0] <= prev[1]) {
+      if (cur[1] > prev[1]) prev[1] = cur[1];
+    } else {
+      merged.push(cur);
+    }
+  }
+
   let out = '', pos = 0;
-  for (const [a, b] of ranges) {
+  for (const [a, b] of merged) {
     out += esc(t.slice(pos, a)) + '<mark>' + esc(t.slice(a, b)) + '</mark>';
     pos = b;
   }
@@ -392,6 +738,41 @@ async function copyStation(st, btn) {
   return ok;
 }
 
+async function shareOrCopy({ title, text, url }) {
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title, text, url });
+      return true;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return false;
+    }
+  }
+  return copyText(url, 'คัดลอกลิงก์สำหรับแชร์แล้ว');
+}
+
+function stationShareUrl(st) {
+  try {
+    const u = new URL(window.location.origin + '/');
+    u.searchParams.set('id', String(st.id));
+    return u.toString();
+  } catch {
+    return `?id=${encodeURIComponent(st.id)}`;
+  }
+}
+
+function jurShareUrl(q, tab = 'jur') {
+  try {
+    const u = new URL('jurisdiction.html', window.location.href);
+    u.search = '';
+    u.hash = '';
+    if (q) u.searchParams.set('j', q);
+    u.searchParams.set('jtab', tab || 'jur');
+    return u.toString();
+  } catch {
+    return `jurisdiction.html?j=${encodeURIComponent(q || '')}&jtab=${encodeURIComponent(tab || 'jur')}`;
+  }
+}
+
 /* ---------- Icons (for cards / badges) ---------- */
 const icon = {
   check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -523,22 +904,17 @@ function setProvince(v) {
 let sugState = { items: [], active: -1, total: 0 };
 
 function getSuggestions(raw) {
-  const qn = norm(raw);
-  if (!qn) return { items: [], total: 0 };
+  const qCtx = prepareQuery(raw);
+  if (!qCtx) return { items: [], total: 0 };
   const scored = [];
-  let total = 0;
-  for (const st of STATIONS) {
-    const h = HAY.get(st.id);
-    let score = -1;
-    if (h.name.startsWith(qn)) score = 0;
-    else if (h.name.includes(qn)) score = 1;
-    else if (h.prov.includes(qn)) score = 2;
-    else if (h.addr.includes(qn)) score = 3;
-    else if (h.phone.includes(qn) || h.region.includes(qn)) score = 4;
-    if (score >= 0) { scored.push({ st, score }); total++; }
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
+    const score = scoreStation(st, qCtx);
+    if (score >= 0) scored.push({ st, score });
   }
+  /* Strict Exact-First: Tier 0-2 (< 10) always rank above Fuzzy Tier 3 (>= 10) */
   scored.sort((a, b) => a.score - b.score || a.st.name.localeCompare(b.st.name, 'th'));
-  return { items: scored.slice(0, 8), total };
+  return { items: scored.slice(0, 8), total: scored.length };
 }
 
 function renderSuggest(raw) {
@@ -603,11 +979,12 @@ function scanStart() {
 }
 
 function regionCounts() {
-  const qn = norm(state.q);
+  const qCtx = prepareQuery(state.q);
   const counts = { all: 0 };
   for (const r of REGIONS) if (r.id !== 'all') counts[r.id] = 0;
-  for (const st of STATIONS) {
-    if (!stationMatches(st, qn)) continue;
+  for (let i = 0; i < STATIONS.length; i++) {
+    const st = STATIONS[i];
+    if (qCtx && scoreStation(st, qCtx) < 0) continue;
     if (state.province && st.province_th !== state.province) continue;
     if (state.savedOnly && !state.saved.has(st.id)) continue;
     counts.all++;
@@ -695,7 +1072,7 @@ function selectStation(st) {
       <div class="copy-preview">
         <div class="copy-preview-head">
           <b>ข้อความที่จะคัดลอก (วางลงซอง/หนังสือ)</b>
-          <a href="${esc(reportURL(st))}">แจ้งที่อยู่คลาดเคลื่อน</a>
+          <a href="${esc(reportURL(st))}" data-report-id="${st.id}">แจ้งที่อยู่คลาดเคลื่อน</a>
         </div>
         <pre class="copy-pre">${esc(addrOk ? envelopeCopyText(st) : 'ต้นทางยังไม่มีที่อยู่สำหรับสถานีนี้ — กรุณาแจ้งที่อยู่')}</pre>
       </div>
@@ -710,6 +1087,12 @@ function selectStation(st) {
     $('#openModalBtn', box)?.addEventListener('click', () => openStationModal(st.id));
     $('#printOneBtn', box)?.addEventListener('click', () => printStation(st));
     $('#saveStationBtn', box)?.addEventListener('click', () => toggleSave(st.id));
+    $('[data-report-id]', box)?.addEventListener('click', (e) => {
+      if ($('#reportModal')) {
+        e.preventDefault();
+        openReportModal(st.id);
+      }
+    });
   }
 
   const hudCopy = $('#hudCopyBtn');
@@ -832,6 +1215,9 @@ function resetAll() {
 }
 
 /* ---------- URL Sync & Read ---------- */
+let pendingStationId = null;
+let activeModalId = null;
+
 function syncURL() {
   try {
     const p = new URLSearchParams();
@@ -840,6 +1226,7 @@ function syncURL() {
     if (state.region !== 'all') p.set('region', state.region);
     if (state.sort !== 'region') p.set('sort', state.sort);
     if (state.page > 1) p.set('page', String(state.page));
+    if (activeModalId && !$('#jurForm')) p.set('id', String(activeModalId));
     if ($('#jurForm')) {
       if (jurParams.q) p.set('j', jurParams.q);
       if (jurParams.tab !== 'jur') p.set('jtab', jurParams.tab);
@@ -865,6 +1252,13 @@ function applyURL() {
     if (p.get('sort') && ['region', 'name', 'province'].includes(p.get('sort'))) state.sort = p.get('sort');
     const pg = parseInt(p.get('page') || '1', 10);
     if (pg > 0) state.page = pg;
+    const rawId = p.get('id');
+    if (rawId) {
+      const parsedId = parseInt(rawId, 10);
+      if (Number.isFinite(parsedId) && ST_BY_ID.has(parsedId)) {
+        pendingStationId = parsedId;
+      }
+    }
   } catch { /* ignore */ }
 }
 
@@ -872,7 +1266,7 @@ function applyJurURL() {
   try {
     const p = new URLSearchParams(window.location.search);
     if (p.get('j')) jurParams.q = p.get('j');
-    if (['jur', 'digest'].includes(p.get('jtab'))) jurParams.tab = p.get('jtab');
+    if (['jur', 'digest', 'ai'].includes(p.get('jtab'))) jurParams.tab = p.get('jtab');
   } catch { /* ignore */ }
 }
 
@@ -912,6 +1306,8 @@ function openStationModal(id) {
   dSave.textContent = state.saved.has(st.id) ? 'บันทึกแล้ว ✓' : 'บันทึกสถานีนี้';
   dSave.dataset.id = st.id;
   $('#dPrint').dataset.id = st.id;
+  const dShare = $('#dShare');
+  if (dShare) dShare.dataset.id = st.id;
 
   const addr = hasAddress(st);
   const copyBtn = $('#dCopy');
@@ -919,7 +1315,14 @@ function openStationModal(id) {
   copyBtn.disabled = !addr;
   copyBtn.setAttribute('aria-describedby', 'dCopyPreview');
   $('#dCopyPreview').textContent = addr ? envelopeCopyText(st) : 'ต้นทางยังไม่มีที่อยู่สำหรับสถานีนี้ — กรุณาแจ้งที่อยู่';
-  $('#dReport').href = reportURL(st);
+  const dReport = $('#dReport');
+  if (dReport) {
+    dReport.href = reportURL(st);
+    dReport.dataset.id = st.id;
+  }
+
+  activeModalId = st.id;
+  if (!$('#jurForm')) syncURL();
 
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
@@ -936,6 +1339,10 @@ function closeStationModal() {
   document.body.style.overflow = '';
   const dMap = $('#dMap');
   if (dMap) dMap.src = 'about:blank';
+  if (activeModalId !== null) {
+    activeModalId = null;
+    if (!$('#jurForm')) syncURL();
+  }
   if (lastFocus && lastFocus.focus) lastFocus.focus();
 }
 
@@ -1031,6 +1438,7 @@ const JUR_ADDR = new Map();
 const JUR_TABS = [
   { id: 'jur', tab: 'tabJur', panel: 'panelJur' },
   { id: 'digest', tab: 'tabDigest', panel: 'panelDigest' },
+  { id: 'ai', tab: 'tabAi', panel: 'panelAi' },
 ];
 
 function normJur(s) {
@@ -1404,6 +1812,7 @@ function renderJurResults() {
   const showAddr = R.addrHits.slice(0, 6);
   const more = (R.hits.length + R.addrHits.length) - (showHits.length + showAddr.length);
   const header = `<div class="jur-hints"><span>พบ <b>${R.hits.length + R.addrHits.length}</b> รายการสำหรับ “${esc(R.q)}”</span>
+    <button class="btn btn-outline btn-sm" type="button" id="jurShareBtn">แชร์ผลตรวจ</button>
     <button class="icon-btn" type="button" id="jurCsvBtn">ดาวน์โหลด CSV</button>
     <button class="btn btn-ghost btn-sm" type="button" id="jurClearBtn">ล้างคำค้น</button></div>`;
   const body = showHits.map(h => jurResultCard(h, R.q)).join('') + showAddr.map(h => jurAddressCard(h, R.q)).join('');
@@ -1411,6 +1820,14 @@ function renderJurResults() {
     <p>ไม่พบ “${esc(R.q)}” ในบัญชีแนบท้ายประกาศและในที่อยู่สถานี กรุณาตรวจสอบการสะกดชื่อตำบล หรือเปิดประกาศฉบับเต็ม / สอบถามสถานีโดยตรง</p>
     <a href="https://ratchakitcha.soc.go.th/documents/17187.pdf" target="_blank" rel="noopener">เปิดประกาศฉบับจริง (PDF)</a></div>`;
   box.innerHTML = (R.hits.length + R.addrHits.length ? header + body + (more > 0 ? `<p class="jur-note">แสดง ${showHits.length + showAddr.length} รายการจากทั้งหมด ${R.hits.length + R.addrHits.length} รายการ — พิมพ์ชื่อตำบลให้เฉพาะเจาะจงขึ้นเพื่อจำกัดผลลัพธ์</p>` : '') : empty);
+  $('#jurShareBtn')?.addEventListener('click', () => {
+    const shareUrl = jurShareUrl(jurParams.q || R.q, jurParams.tab || 'jur');
+    shareOrCopy({
+      title: `เขตอำนาจสอบสวน: ${R.q} — PS Locator`,
+      text: `ผลการตรวจสอบเขตอำนาจสอบสวนสำหรับ “${R.q}” (${R.hits.length + R.addrHits.length} รายการ) — PS Locator`,
+      url: shareUrl,
+    });
+  });
   $('#jurCsvBtn')?.addEventListener('click', exportJurisdictionCSV);
   $('#jurClearBtn')?.addEventListener('click', () => jurSearch(''));
 }
@@ -1600,12 +2017,413 @@ function bindJurisdictionEvents() {
   $('#digestQ')?.addEventListener('input', (e) => { jurState.digestQ = e.target.value.trim(); renderDigest(); });
   $('#digestQ')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fullTextSearch(); } });
   $('#fullSearchBtn')?.addEventListener('click', fullTextSearch);
+
+  bindAiAssistantEvents();
+}
+
+/* ============================================================
+   ผู้ช่วย AI ราชกิจจานุเบกษา (Edge AI Strict Legal RAG + Local Fallback)
+   ============================================================ */
+const AI_LEGAL_DISCLAIMER =
+  'คำเตือนทางกฎหมาย: คำตอบนี้สรุปจากข้อความประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษาเท่านั้น ' +
+  'อาจมีตำบลบางส่วน/เฉพาะหมู่ที่/แนวเขต หรือ 4 สถานีที่ถอดข้อความไม่ครบ โปรดเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมาย';
+
+let aiBusy = false;
+
+function syncAiClear() {
+  const qEl = $('#aiQ'), btn = $('#clearAiBtn'), cap = $('#aiCapsule');
+  if (!qEl) return;
+  const hasVal = qEl.value.length > 0;
+  if (btn) btn.hidden = !hasVal;
+  if (cap) cap.classList.toggle('has-value', hasVal);
+}
+
+function extractLocalAiTerms(rawQuery) {
+  const cleaned = String(rawQuery || '')
+    .normalize('NFC')
+    .replace(/เหตุเกิดที่|เกิดเหตุที่|แจ้งความที่|แจ้ง\s*สภ\.?\s*ไหน|สภ\.?\s*ไหน|สน\.?\s*ไหน|โรงพักไหน|เขตอำนาจ|มีข้อยกเว้นหรือไม่|มีข้อยกเว้นไหม|รับผิดชอบบ้าง|รับผิดชอบ|เปลี่ยนแปลงอะไรบ้าง|อยู่ในเขต|พื้นที่|ช่วยตรวจสอบ|ตรวจสอบ/gu, ' ')
+    .replace(/[?？!！,،]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const candidates = [];
+  const push = (t) => {
+    const v = String(t || '').trim();
+    if (v.length >= 2 && !candidates.includes(v)) candidates.push(v);
+  };
+
+  /* ดึงชื่อหลัง ต./ตำบล/แขวง/อ./อำเภอ/สภ./สน. ก่อน */
+  const adminRe = /(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|สภ\.|สน\.)\s*([ก-๙a-zA-Z0-9.\-]+)/gu;
+  let m;
+  while ((m = adminRe.exec(rawQuery)) !== null) {
+    push(m[1]);
+  }
+  if (cleaned) {
+    push(cleaned);
+    for (const part of cleaned.split(/\s+/)) {
+      push(stripAdminPrefix(part));
+    }
+    for (const w of segmentWords(cleaned)) {
+      if (w.length >= 3) push(w);
+    }
+  }
+  return candidates;
+}
+
+function renderAiCitationsHTML(citations) {
+  if (!Array.isArray(citations) || !citations.length) return '';
+  return `<div class="ai-sec">
+    <div class="jur-sec-title">อ้างอิงราชกิจจานุเบกษา (ตรวจสอบเลขหน้าแล้ว)</div>
+    <div class="ai-citations">
+      ${citations.map(c => {
+        const pageNum = Number(c.page_number) || 1;
+        const href = `${c.pdf_url}#page=${pageNum}`;
+        return `<a class="btn btn-outline btn-sm ai-cite-btn" href="${esc(href)}" target="_blank" rel="noopener">เปิด PDF ราชกิจจานุเบกษา หน้า ${pageNum} <small>(${esc(c.label || c.doc_code || 'ประกาศ ตร.')})</small></a>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAiStationCardsHTML(stationsList) {
+  if (!Array.isArray(stationsList) || !stationsList.length) return '';
+  return `<div class="ai-sec">
+    <div class="jur-sec-title">สถานีตำรวจที่เกี่ยวข้อง (ยืนยันจากฐานข้อมูล 1,484 แห่ง)</div>
+    <div class="ai-station-list">
+      ${stationsList.map(item => {
+        const st = ST_BY_ID.get(Number(item.id)) || item;
+        if (!st || !st.name) return '';
+        const phoneHtml = jurPhoneLink(st);
+        const regLabel = REGION_SHORT[st.region] || (st.region ? String(st.region) : '-');
+        return `<article class="ai-station-card">
+          <div class="ai-station-top">
+            <div>
+              <strong>${esc(st.name)}</strong>
+              <div class="jur-meta"><span>จังหวัด${esc(st.province_th || '-')}</span><span>${esc(regLabel)}</span>${phoneHtml}</div>
+            </div>
+          </div>
+          <p class="ai-station-addr">${esc(st.address || 'ไม่มีข้อมูลที่อยู่')}</p>
+          ${item.note ? `<p class="ai-station-note">${esc(item.note)}</p>` : ''}
+          <div class="jur-actions">
+            <button class="btn btn-primary btn-sm" type="button" data-ai-detail="${st.id}">ดูรายละเอียดสถานี</button>
+            ${hasAddress(st)
+              ? `<button class="btn btn-outline btn-sm" type="button" data-ai-copy="${st.id}">คัดลอกที่อยู่</button>`
+              : ''}
+            <a class="btn btn-outline btn-sm" href="${esc(mapsLink(st))}" target="_blank" rel="noopener">นำทางไปโรงพัก</a>
+          </div>
+        </article>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAiAnswer(data) {
+  const box = $('#aiResults');
+  if (!box) return;
+  const exceptionsHtml = Array.isArray(data.boundary_exceptions) && data.boundary_exceptions.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">ข้อยกเว้น / แนวเขตที่ควรตรวจสอบเพิ่มเติม</div>
+        <ul class="ai-list">${data.boundary_exceptions.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      </div>`
+    : '';
+
+  const neighborsHtml = Array.isArray(data.neighbors) && data.neighbors.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">สถานีข้างเคียงสำหรับประสานงาน</div>
+        <div class="ai-chips">${data.neighbors.map(n => `<button type="button" class="chip" data-ai-jump="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+      </div>`
+    : '';
+
+  box.innerHTML = `<article class="jur-card ai-answer-card">
+    <div class="ai-mode-badge is-edge">ตอบโดยผู้ช่วย AI ราชกิจจานุเบกษา · ผ่านการยืนยันรหัสสถานีและเลขหน้าแล้ว</div>
+    <p class="ai-summary">${esc(data.summary || '')}</p>
+    ${renderAiStationCardsHTML(data.stations)}
+    ${exceptionsHtml}
+    ${neighborsHtml}
+    ${renderAiCitationsHTML(data.citations)}
+    <p class="jur-warn ai-disclaimer">${esc(data.legal_disclaimer || AI_LEGAL_DISCLAIMER)}</p>
+  </article>`;
+}
+
+async function runLocalAiFallback(rawQuery, reasonMsg) {
+  const box = $('#aiResults');
+  if (!box) return;
+  const bannerMsg = reasonMsg || 'กำลังใช้โหมดค้นหาความเร็วสูงในเครื่อง (ออฟไลน์/สำรองอัตโนมัติ)';
+
+  let jurData = jurState.data;
+  if (!jurData) {
+    try { jurData = await loadJurisdiction(); } catch { jurData = null; }
+  }
+
+  const terms = extractLocalAiTerms(rawQuery);
+  let matchedHits = [];
+  let matchedAddr = [];
+  let matchedTerm = rawQuery;
+
+  if (jurData) {
+    for (const term of terms) {
+      const res = jurFindCandidates(term);
+      if (res.hits.length || res.addrHits.length) {
+        matchedHits = res.hits;
+        matchedAddr = res.addrHits;
+        matchedTerm = term;
+        break;
+      }
+    }
+  }
+
+  /* ค้นในย่อประกาศด้วย (สำหรับคำถามเชิงนโยบาย เช่น ฉบับที่ 2) */
+  const digestMatches = jurData && Array.isArray(jurData.summary)
+    ? jurData.summary.filter(c => {
+        const hay = normJur([c.title, c.text, c.keys].join(' '));
+        return terms.some(t => {
+          const nt = normJur(t);
+          return nt.length >= 2 && hay.includes(nt);
+        });
+      }).slice(0, 3)
+    : [];
+
+  const stationsFound = [];
+  const seenSt = new Set();
+  const citations = [];
+  const seenCite = new Set();
+  const warnings = [];
+  const doc2567Url = 'https://ratchakitcha.soc.go.th/documents/17187.pdf';
+
+  for (const h of matchedHits.slice(0, 6)) {
+    const rec = jurData.stations[h.idx];
+    const st = ST_BY_ID.get(rec.id);
+    if (!st || seenSt.has(st.id)) continue;
+    seenSt.add(st.id);
+    const missing = rec.count - rec.tambons.length;
+    const partialCount = rec.tambons.filter(t => t.partial).length;
+    const noteParts = [`อำเภอ${rec.amphoe} · บัญชีแนบท้าย หน้า ${rec.page}`];
+    if (partialCount > 0) {
+      noteParts.push(`มี ${partialCount} ตำบลระบุบางส่วน/เฉพาะหมู่ที่/แนวเขต`);
+      warnings.push(`${st.name} (หน้า ${rec.page}): มี ${partialCount} ตำบลที่ประกาศระบุ “บางส่วน/เฉพาะหมู่ที่/แนวเขต” ต้องตรวจสอบแนวเขตจริงใน PDF`);
+    }
+    if (missing > 0) {
+      noteParts.push(`ถอดชื่อได้ ${rec.tambons.length}/${rec.count} ตำบล`);
+      warnings.push(`${st.name} (หน้า ${rec.page}): ประกาศระบุ ${rec.count} ตำบล แต่ถอดข้อความได้ ${rec.tambons.length} ตำบล ต้องตรวจสอบประกาศฉบับจริง`);
+    }
+    stationsFound.push({ id: st.id, note: noteParts.join(' · ') });
+    if (rec.page && !seenCite.has('2567:' + rec.page)) {
+      seenCite.add('2567:' + rec.page);
+      citations.push({ doc_code: '2567', label: 'ประกาศ ตร. 22 มี.ค. 2567', page_number: rec.page, pdf_url: doc2567Url });
+    }
+  }
+
+  for (const ah of matchedAddr.slice(0, 3)) {
+    const st = ST_BY_ID.get(ah.id);
+    if (!st || seenSt.has(st.id)) continue;
+    seenSt.add(st.id);
+    stationsFound.push({ id: st.id, note: 'พบจากตำบล/แขวงที่ตั้งสถานีตามที่อยู่ (ไม่ใช่บัญชีเขตอำนาจตามประกาศ — โปรดยืนยันกับสถานี)' });
+  }
+
+  /* ถ้ายังไม่พบใน jurisdictions ให้ลองค้นชื่อสถานีจาก STATIONS โดยตรง */
+  if (!stationsFound.length && !digestMatches.length) {
+    for (const term of terms) {
+      const { items } = getSuggestions(term);
+      for (const it of items.slice(0, 4)) {
+        if (!seenSt.has(it.st.id)) {
+          seenSt.add(it.st.id);
+          stationsFound.push({ id: it.st.id, note: 'พบจากฐานข้อมูลสถานีตำรวจในเครื่อง' });
+        }
+      }
+      if (stationsFound.length) break;
+    }
+  }
+
+  for (const dItem of digestMatches) {
+    const src = (jurData.meta.sources || []).find(s => s.code === dItem.doc) || { label: 'ประกาศ ตร.', url: doc2567Url };
+    const ck = `${dItem.doc}:${dItem.page}`;
+    if (!seenCite.has(ck)) {
+      seenCite.add(ck);
+      citations.push({ doc_code: dItem.doc, label: src.label, page_number: dItem.page, pdf_url: src.url });
+    }
+  }
+
+  const digestHtml = digestMatches.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">สรุปสาระสำคัญจากประกาศที่เกี่ยวข้อง</div>
+        ${digestMatches.map(c => `<div class="ai-digest-hit"><b>${esc(c.title)}</b><p>${esc(c.text)}</p></div>`).join('')}
+      </div>`
+    : '';
+
+  const warnHtml = warnings.length
+    ? `<div class="ai-sec">
+        <div class="jur-sec-title">ข้อควรตรวจสอบแนวเขต / ข้อมูลถอดข้อความ</div>
+        <ul class="ai-list">${warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>
+      </div>`
+    : '';
+
+  if (!stationsFound.length && !digestMatches.length) {
+    box.innerHTML = `<article class="jur-card ai-answer-card">
+      <div class="ai-mode-badge is-fallback">${esc(bannerMsg)}</div>
+      <div class="jur-empty">
+        <h3>ไม่พบข้อมูลที่ตรงกับ “${esc(rawQuery)}” ในฐานข้อมูลเครื่อง</h3>
+        <p>ลองระบุชื่อตำบล แขวง อำเภอ จังหวัด หรือชื่อ สภ./สน. ให้ชัดเจนขึ้น หรือเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริง</p>
+        <a class="btn btn-outline btn-sm" href="${doc2567Url}" target="_blank" rel="noopener">เปิดประกาศ ตร. 2567 (PDF)</a>
+      </div>
+      <p class="jur-warn ai-disclaimer">${esc(AI_LEGAL_DISCLAIMER)}</p>
+    </article>`;
+    return;
+  }
+
+  const summaryText = stationsFound.length
+    ? `สลับมาใช้การค้นหาในเครื่องอัตโนมัติ: พบ ${stationsFound.length} สถานีที่เกี่ยวข้องกับ “${matchedTerm}”`
+    : `สลับมาใช้การค้นหาในเครื่องอัตโนมัติ: พบ ${digestMatches.length} หัวข้อสรุปประกาศที่เกี่ยวข้องกับคำถามของคุณ`;
+
+  box.innerHTML = `<article class="jur-card ai-answer-card">
+    <div class="ai-mode-badge is-fallback">${esc(bannerMsg)}</div>
+    <p class="ai-summary">${esc(summaryText)}</p>
+    ${renderAiStationCardsHTML(stationsFound)}
+    ${digestHtml}
+    ${warnHtml}
+    ${renderAiCitationsHTML(citations)}
+    <p class="jur-warn ai-disclaimer">${esc(AI_LEGAL_DISCLAIMER)}</p>
+  </article>`;
+}
+
+async function submitAiSearch(rawQuery) {
+  const q = String(rawQuery || '').trim();
+  if (q.length < 2) {
+    showToast('กรุณาพิมพ์คำถามอย่างน้อย 2 ตัวอักษร');
+    return;
+  }
+  if (aiBusy) return;
+  aiBusy = true;
+
+  const input = $('#aiQ');
+  if (input) input.value = q;
+  syncAiClear();
+
+  const submitBtn = $('#aiSubmitBtn');
+  if (submitBtn) submitBtn.disabled = true;
+
+  const box = $('#aiResults');
+  if (box) {
+    box.innerHTML = `<div class="jur-empty ai-loading"><h3>กำลังค้นหาและตรวจสอบกับราชกิจจานุเบกษา…</h3><p>ระบบกำลังยืนยันรหัสสถานีและเลขหน้าประกาศฉบับจริง</p></div>`;
+  }
+  emitCapsulePulse(0.85, 620);
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      await runLocalAiFallback(q, 'ขณะนี้อยู่ในโหมดออฟไลน์ ระบบสลับมาใช้การค้นหาในเครื่องให้อัตโนมัติ');
+      return;
+    }
+
+    const res = await fetch('/api/ai-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+    });
+
+    if (!res.ok) {
+      await runLocalAiFallback(q, 'ไม่สามารถเชื่อมต่อผู้ช่วย AI ได้ในขณะนี้ ระบบสลับมาใช้การค้นหาในเครื่องให้อัตโนมัติ');
+      return;
+    }
+
+    const data = await res.json();
+    if (data && data.ok) {
+      renderAiAnswer(data);
+    } else {
+      await runLocalAiFallback(q, (data && data.message) || 'ระบบสลับมาใช้การค้นหาความเร็วสูงในเครื่องให้อัตโนมัติ');
+    }
+  } catch {
+    await runLocalAiFallback(q, 'ไม่สามารถเชื่อมต่อเครือข่ายได้ ระบบสลับมาใช้การค้นหาในเครื่องให้อัตโนมัติ');
+  } finally {
+    aiBusy = false;
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+function bindAiAssistantEvents() {
+  const form = $('#aiForm');
+  const input = $('#aiQ');
+  if (!form || !input) return;
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitAiSearch(input.value);
+  });
+
+  input.addEventListener('input', syncAiClear);
+
+  $('#clearAiBtn')?.addEventListener('click', () => {
+    input.value = '';
+    syncAiClear();
+    input.focus();
+  });
+
+  $('.ai-hints')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-aiq]');
+    if (chip) {
+      input.value = chip.dataset.aiq;
+      syncAiClear();
+      submitAiSearch(chip.dataset.aiq);
+    }
+  });
+
+  $('#aiResults')?.addEventListener('click', (e) => {
+    const copy = e.target.closest('[data-ai-copy]');
+    if (copy) {
+      const st = ST_BY_ID.get(+copy.dataset.aiCopy);
+      if (st) copyStation(st, copy);
+      return;
+    }
+    const detail = e.target.closest('[data-ai-detail]');
+    if (detail) {
+      openStationModal(+detail.dataset.aiDetail);
+      return;
+    }
+    const jump = e.target.closest('[data-ai-jump]');
+    if (jump) {
+      setJurTab('jur');
+      jurSearch(jump.dataset.aiJump);
+    }
+  });
+
+  /* Web Speech API (th-TH) สำหรับผู้ช่วย AI */
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const voiceBtn = $('#aiVoiceBtn');
+  if (SpeechRec && voiceBtn) {
+    voiceBtn.style.display = 'inline-flex';
+    const rec = new SpeechRec();
+    rec.lang = 'th-TH';
+    rec.interimResults = false;
+    let listening = false;
+    voiceBtn.addEventListener('click', () => {
+      if (listening) { rec.stop(); return; }
+      try {
+        rec.start();
+        listening = true;
+        voiceBtn.classList.add('is-active');
+        emitCapsulePulse(0.9, 480);
+      } catch {
+        listening = false;
+        voiceBtn.classList.remove('is-active');
+      }
+    });
+    rec.addEventListener('result', (ev) => {
+      const t = ev.results[0]?.[0]?.transcript || '';
+      if (t) {
+        input.value = t;
+        syncAiClear();
+        submitAiSearch(t);
+      }
+    });
+    rec.addEventListener('end', () => {
+      listening = false;
+      voiceBtn.classList.remove('is-active');
+    });
+  }
 }
 
 function initJurisdiction() {
   buildAddressIndex();
   bindJurisdictionEvents();
   if (jurParams.tab === 'digest') setJurTab('digest');
+  else if (jurParams.tab === 'ai') setJurTab('ai');
   else setJurTab('jur');
   if (jurParams.q || jurParams.tab !== 'jur') {
     loadJurisdiction().then(afterJurisdictionLoaded).catch(jurisLoadFailed);
@@ -1797,6 +2615,206 @@ function bindStationEvents() {
   }
 }
 
+/* ---------- Crowdsourced Data Verification Modal (#reportModal) ---------- */
+const REPORT_FIELD_LABELS = {
+  address: 'ที่อยู่สถานี',
+  phone: 'หมายเลขโทรศัพท์',
+  fax: 'หมายเลขโทรสาร (แฟกซ์)',
+  website: 'เว็บไซต์ทางการ',
+  other: 'ข้อมูลอื่นๆ',
+};
+
+let reportLastFocus = null;
+let reportStation = null;
+let reportSubmitting = false;
+
+function getReportCurrentValue(st, fieldType) {
+  if (!st) return 'ไม่มีข้อมูล';
+  if (fieldType === 'phone') return formatPhoneDisplay(st.phone) || 'ไม่มีข้อมูล';
+  if (fieldType === 'fax') return formatPhoneDisplay(st.fax) || 'ไม่มีข้อมูล';
+  if (fieldType === 'address') return st.address || 'ไม่มีข้อมูล';
+  if (fieldType === 'website') return st.website || 'ไม่มีข้อมูล';
+  return 'ระบุรายละเอียดในช่องข้อมูลที่ถูกต้อง';
+}
+
+function buildReportMailto(st, fieldType, suggestedVal, sourceRef, reporter) {
+  const label = REPORT_FIELD_LABELS[fieldType] || fieldType;
+  const currentVal = getReportCurrentValue(st, fieldType);
+  const subject = `แจ้งข้อมูลคลาดเคลื่อน (${label}) — ${st.name}`;
+  const body = [
+    `สถานี: ${st.name} (ID: ${st.id})`,
+    `จังหวัด: ${st.province_th}`,
+    `ประเภทข้อมูล: ${label}`,
+    `ข้อมูลปัจจุบันในระบบ: ${currentVal}`,
+    `ข้อมูลที่ถูกต้อง: ${suggestedVal || ''}`,
+    sourceRef ? `แหล่งอ้างอิง: ${sourceRef}` : '',
+    reporter ? `ผู้แจ้ง: ${reporter}` : '',
+  ].filter(Boolean).join('\n');
+  return `mailto:akaradje07@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function syncReportCurrentAndMailto() {
+  if (!reportStation) return;
+  const fieldType = $('#reportFieldType')?.value || 'address';
+  const curEl = $('#reportCurrentValue');
+  if (curEl) curEl.textContent = getReportCurrentValue(reportStation, fieldType);
+  const mailtoBtn = $('#reportMailtoFallback');
+  if (mailtoBtn) {
+    mailtoBtn.href = buildReportMailto(
+      reportStation,
+      fieldType,
+      $('#reportSuggested')?.value.trim() || '',
+      $('#reportSource')?.value.trim() || '',
+      $('#reportReporter')?.value.trim() || ''
+    );
+  }
+}
+
+function showReportFeedback(kind, message, mailtoHref) {
+  const box = $('#reportFeedback');
+  if (!box) return;
+  box.hidden = false;
+  box.className = `report-feedback is-${kind}`;
+  box.innerHTML = esc(message) + (mailtoHref
+    ? ` <a class="report-mailto-inline" href="${esc(mailtoHref)}">เปิดแอปอีเมลพร้อมข้อความที่กรอกไว้ →</a>`
+    : '');
+}
+
+function openReportModal(stationId) {
+  const repModal = $('#reportModal');
+  const st = ST_BY_ID.get(Number(stationId));
+  if (!repModal || !st) return;
+
+  reportStation = st;
+  reportLastFocus = document.activeElement;
+
+  const idInput = $('#reportStationId');
+  if (idInput) idInput.value = String(st.id);
+  const meta = $('#reportStationMeta');
+  if (meta) meta.textContent = `${st.name} · จังหวัด${st.province_th}`;
+  const title = $('#reportModalTitle');
+  if (title) title.textContent = 'แจ้งข้อมูลคลาดเคลื่อน';
+
+  const fieldSel = $('#reportFieldType');
+  if (fieldSel) fieldSel.value = 'address';
+  const sug = $('#reportSuggested');
+  if (sug) sug.value = '';
+  const src = $('#reportSource');
+  if (src) src.value = '';
+  const rep = $('#reportReporter');
+  if (rep) rep.value = '';
+  const hp = $('#reportHp');
+  if (hp) hp.value = '';
+  const fb = $('#reportFeedback');
+  if (fb) { fb.hidden = true; fb.textContent = ''; }
+  const submitBtn = $('#reportSubmitBtn');
+  if (submitBtn) submitBtn.disabled = false;
+
+  syncReportCurrentAndMailto();
+
+  repModal.classList.add('open');
+  repModal.setAttribute('aria-hidden', 'false');
+  repModal.removeAttribute('inert');
+  document.body.style.overflow = 'hidden';
+  (sug || fieldSel || $('#reportModalClose'))?.focus();
+}
+
+function closeReportModal() {
+  const repModal = $('#reportModal');
+  if (!repModal || !repModal.classList.contains('open')) return;
+  repModal.classList.remove('open');
+  repModal.setAttribute('aria-hidden', 'true');
+  repModal.setAttribute('inert', '');
+  if (!modal || !modal.classList.contains('open')) {
+    document.body.style.overflow = '';
+  }
+  if (reportLastFocus && reportLastFocus.focus) reportLastFocus.focus();
+}
+
+function bindReportModalEvents() {
+  const repModal = $('#reportModal');
+  const form = $('#reportForm');
+  if (!repModal || !form) return;
+
+  $('#reportModalClose')?.addEventListener('click', closeReportModal);
+  $('#reportCancelBtn')?.addEventListener('click', closeReportModal);
+  repModal.addEventListener('click', (e) => { if (e.target === repModal) closeReportModal(); });
+
+  repModal.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusables = $$('a[href], button:not([disabled]), input:not([tabindex="-1"]):not([type="hidden"]), select, textarea', repModal)
+      .filter(el => el.getClientRects().length);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  $('#reportFieldType')?.addEventListener('change', syncReportCurrentAndMailto);
+  $('#reportSuggested')?.addEventListener('input', syncReportCurrentAndMailto);
+  $('#reportSource')?.addEventListener('input', syncReportCurrentAndMailto);
+  $('#reportReporter')?.addEventListener('input', syncReportCurrentAndMailto);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (reportSubmitting || !reportStation) return;
+
+    const fieldType = $('#reportFieldType')?.value || 'address';
+    const suggestedVal = ($('#reportSuggested')?.value || '').trim();
+    const sourceRef = ($('#reportSource')?.value || '').trim();
+    const reporter = ($('#reportReporter')?.value || '').trim();
+    const websiteHp = ($('#reportHp')?.value || '').trim();
+
+    if (suggestedVal.length < 2) {
+      showReportFeedback('error', 'กรุณากรอกข้อมูลที่ถูกต้องอย่างน้อย 2 ตัวอักษร');
+      $('#reportSuggested')?.focus();
+      return;
+    }
+
+    const mailtoHref = buildReportMailto(reportStation, fieldType, suggestedVal, sourceRef, reporter);
+    syncReportCurrentAndMailto();
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showReportFeedback('warn', 'ขณะนี้อยู่ในโหมดออฟไลน์ กรุณาส่งคำแจ้งผ่านอีเมลแทน', mailtoHref);
+      return;
+    }
+
+    reportSubmitting = true;
+    const submitBtn = $('#reportSubmitBtn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          station_id: String(reportStation.id),
+          field_type: fieldType,
+          suggested_value: suggestedVal,
+          source_ref: sourceRef,
+          reporter,
+          website_hp: websiteHp,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        showReportFeedback('ok', data.message || 'ขอบคุณครับ ข้อมูลของคุณเข้าสู่คิวตรวจสอบของผู้ดูแลแล้ว');
+        showToast('ส่งคำแจ้งตรวจสอบเรียบร้อยแล้ว');
+        if ($('#reportSuggested')) $('#reportSuggested').value = '';
+      } else if (data && data.fallback === 'mailto') {
+        showReportFeedback('warn', data.message || 'ระบบรับแจ้งออนไลน์ยังไม่พร้อมใช้งาน กรุณาส่งผ่านอีเมลแทน', mailtoHref);
+      } else {
+        showReportFeedback('error', (data && data.message) || 'ไม่สามารถส่งคำแจ้งได้ในขณะนี้ กรุณาส่งผ่านอีเมลแทน', mailtoHref);
+      }
+    } catch {
+      showReportFeedback('warn', 'เชื่อมต่อระบบรับแจ้งไม่สำเร็จ กรุณาส่งผ่านอีเมลแทน', mailtoHref);
+    } finally {
+      reportSubmitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+}
+
 /* ---------- Global Events (Theme, Modal, Keys, Back-to-top) ---------- */
 function bindGlobalEvents() {
   $('#themeToggle')?.addEventListener('click', () => {
@@ -1833,6 +2851,17 @@ function bindGlobalEvents() {
       const st = ST_BY_ID.get(+e.currentTarget.dataset.id);
       if (st) printStation(st);
     });
+    $('#dShare')?.addEventListener('click', (e) => {
+      const st = ST_BY_ID.get(+e.currentTarget.dataset.id);
+      if (!st) return;
+      const phoneText = formatPhoneDisplay(st.phone) || 'ไม่มีข้อมูล';
+      const addrText = st.address || 'ไม่มีข้อมูล';
+      shareOrCopy({
+        title: `${st.name} — PS Locator`,
+        text: `${st.name} (${st.province_th})\nโทร: ${phoneText}\nที่อยู่: ${addrText}`,
+        url: stationShareUrl(st),
+      });
+    });
     $('#dSave')?.addEventListener('click', (e) => {
       const btn = e.currentTarget;
       const id = +btn.dataset.id;
@@ -1850,7 +2879,16 @@ function bindGlobalEvents() {
       if ($('#jurForm')) { setJurTab('jur'); jurSearch(jq); }
       else window.location.href = 'jurisdiction.html?j=' + encodeURIComponent(jq) + '&jtab=jur';
     });
+    $('#dReport')?.addEventListener('click', (e) => {
+      const id = +(e.currentTarget.dataset.id || $('#dSave')?.dataset.id || 0);
+      if (id && $('#reportModal')) {
+        e.preventDefault();
+        openReportModal(id);
+      }
+    });
   }
+
+  bindReportModalEvents();
 
   /* Global keyboard shortcuts */
   document.addEventListener('keydown', (e) => {
@@ -1859,7 +2897,11 @@ function bindGlobalEvents() {
       const target = $('#searchInput') || $('#jurQ');
       if (target) { target.focus(); target.select(); emitCapsulePulse(1, 640); }
     } else if (e.key === 'Escape') {
-      if (modal && modal.classList.contains('open')) {
+      const repModal = $('#reportModal');
+      if (repModal && repModal.classList.contains('open')) {
+        e.preventDefault();
+        closeReportModal();
+      } else if (modal && modal.classList.contains('open')) {
         e.preventDefault();
         closeStationModal();
       } else if ($('#searchInput')?.value && document.activeElement !== $('#searchInput') && !$('.manual-copy')) {
@@ -1907,7 +2949,22 @@ if (isJurPage) {
   renderRegionChips();
   bindStationEvents();
 
-  if (state.q || state.province || state.region !== 'all' || state.page > 1 || state.sort !== 'region') {
+  if (pendingStationId !== null) {
+    const deepSt = ST_BY_ID.get(pendingStationId);
+    pendingStationId = null;
+    if (deepSt) {
+      setResultsState(true);
+      if ($('#searchInput')?.value) $('#searchHub')?.classList.add('has-value');
+      const list = getFiltered();
+      const idx = list.findIndex(s => s.id === deepSt.id);
+      if (idx >= 0) {
+        state.page = Math.floor(idx / PER_PAGE) + 1;
+      }
+      selected = deepSt;
+      renderResults();
+      openStationModal(deepSt.id);
+    }
+  } else if (state.q || state.province || state.region !== 'all' || state.page > 1 || state.sort !== 'region') {
     setResultsState(true);
     if ($('#searchInput')?.value) $('#searchHub')?.classList.add('has-value');
     renderResults();

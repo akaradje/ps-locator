@@ -11,6 +11,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Noto+Serif+Thai:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script>if (new URLSearchParams(location.search).has('poster-image')) document.documentElement.classList.add('poster-image');</script>
 <style>
+  @view-transition {
+    navigation: auto;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none !important;
+    }
+  }
   :root {
     --ink: #171E29; --ink-2: #2E3847; --paper: #F7F6F2; --red: #7E1F1A; --red-dk: #5F1410;
     --gold: #C9A227; --ok: #1E6F4C; --line: #E5E2D9;

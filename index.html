@@ -279,9 +279,69 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8V3h10v5M7 17H3v-7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h-4m-14 0h14a2 2 0 0 1 2 2v3H5v-3a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         พิมพ์รายละเอียด
       </button>
+      <button class="btn btn-outline" id="dShare" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="1.7"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        แชร์
+      </button>
       <button class="btn btn-ghost" id="dSave" type="button" aria-pressed="false">บันทึกสถานีนี้</button>
       <button class="btn btn-ghost" id="dJurisdiction" type="button">ดูเขตอำนาจของสถานีนี้</button>
     </div>
+  </div>
+</div>
+
+<!-- ════════ REPORT CORRECTION MODAL ════════ -->
+<div class="modal-overlay" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle" aria-hidden="true" inert>
+  <div class="modal report-modal" role="document">
+    <div class="modal-head">
+      <div style="min-width:0">
+        <span class="sub" id="reportStationMeta">แจ้งปรับปรุงข้อมูลสถานี</span>
+        <h2 id="reportModalTitle">แจ้งข้อมูลคลาดเคลื่อน</h2>
+      </div>
+      <button class="modal-close" id="reportModalClose" type="button" aria-label="ปิดหน้าต่างแจ้งข้อมูลคลาดเคลื่อน">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <form id="reportForm" class="report-form" novalidate>
+      <div class="modal-body">
+        <input type="hidden" id="reportStationId" name="station_id" value="">
+        <div class="hp-field" aria-hidden="true">
+          <label for="reportHp">เว็บไซต์</label>
+          <input type="text" id="reportHp" name="website_hp" tabindex="-1" autocomplete="off" value="">
+        </div>
+        <div class="report-field">
+          <label for="reportFieldType">ประเภทข้อมูลที่ต้องการแจ้งแก้ไข</label>
+          <select id="reportFieldType" name="field_type" required>
+            <option value="address">ที่อยู่สถานี</option>
+            <option value="phone">หมายเลขโทรศัพท์</option>
+            <option value="fax">หมายเลขโทรสาร (แฟกซ์)</option>
+            <option value="website">เว็บไซต์ทางการ</option>
+            <option value="other">ข้อมูลอื่นๆ</option>
+          </select>
+        </div>
+        <div class="report-current-box">
+          <span>ข้อมูลปัจจุบันในระบบ:</span>
+          <b id="reportCurrentValue">—</b>
+        </div>
+        <div class="report-field">
+          <label for="reportSuggested">ข้อมูลที่ถูกต้อง <span aria-hidden="true">*</span></label>
+          <textarea id="reportSuggested" name="suggested_value" rows="3" minlength="2" maxlength="500" required placeholder="ระบุที่อยู่ เบอร์โทรศัพท์ หรือข้อมูลที่ถูกต้อง…"></textarea>
+        </div>
+        <div class="report-field">
+          <label for="reportSource">แหล่งอ้างอิง (ถ้ามี)</label>
+          <input type="text" id="reportSource" name="source_ref" maxlength="300" placeholder="เช่น เว็บไซต์สถานี, เพจทางการ, หนังสือราชการ">
+        </div>
+        <div class="report-field">
+          <label for="reportReporter">ชื่อ / หน่วยงานผู้แจ้ง (ไม่บังคับ)</label>
+          <input type="text" id="reportReporter" name="reporter" maxlength="120" placeholder="เช่น เจ้าหน้าที่ สภ.… หรือ ประชาชน">
+        </div>
+        <div id="reportFeedback" class="report-feedback" role="status" aria-live="polite" hidden></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-primary" id="reportSubmitBtn" type="submit">ส่งคำแจ้งตรวจสอบ</button>
+        <a class="btn btn-outline" id="reportMailtoFallback" href="mailto:akaradje07@gmail.com">ส่งผ่านอีเมลแทน</a>
+        <button class="btn btn-ghost" id="reportCancelBtn" type="button">ยกเลิก</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -294,5 +354,6 @@
 
 <script src="data/stations.js"></script>
 <script src="assets/app.js"></script>
+<script src="assets/offline-db.js" defer></script>
 </body>
 </html>

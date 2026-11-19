@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.0.0 — 20 พฤศจิกายน 2569 ✅ ออนไลน์แล้ว · ยกระดับเทคโนโลยี 4 มิติ (Next-Gen Upgrade)
+
+**🌐 https://ps-locator.prajamwan.workers.dev** (Cloudflare Workers + Assets + D1 + Workers AI + Vectorize)
+
+### ภาพรวม
+ยกระดับ PS Locator ครบทั้ง 4 มิติเทคโนโลยีบนฐาน `v1.6.0` (Fast Thai Search + Offline-First PWA, Lazy-Loaded MapLibre WebGL + Citizen SOS Mode, View Transitions + WCAG AAA + Dynamic `/og` Cards, และ Edge AI Strict Legal RAG + Crowdsourced Report Queue + Automated QA) โดยรักษา Zero Build Step, Zero Hallucination และ Free-Tier Safe 100%
+
+### เพิ่ม
+- **Phase 1 — ระบบค้นหาภาษาไทยความเร็วแสง & Offline-First PWA (`assets/app.js`, `sw.js`, `assets/offline-db.js`, `manifest.webmanifest`):**
+  - อัปเกรด Search Engine ด้วย `Intl.Segmenter('th')`, Thai diacritic/การันต์/ฎ-ฏ folding, พจนานุกรมคำย่อราชการ (`กทม`, `บช.น.`, `ภ.1–9`) และ Bounded Damerau-Levenshtein แบบ **Strict Exact-First** (Exact/Token มาก่อน Fuzzy เสมอ · ความเร็วเฉลี่ย `2.75 ms` บน 1,484 สถานี)
+  - Service Worker (`sw.js`, `CACHE_VERSION = 'v1.7.0-p4.1'`) Precache App Shell + ข้อมูล, ล้างแคชเก่าอัตโนมัติใน `activate`, **ห้ามแคช `/api/*` และ `/og`**, Stale-While-Revalidate สำหรับ `data/*` & `assets/*`, และ IndexedDB (`ps-locator-db`) แบบ Non-Blocking (`requestIdleCallback`) พร้อมป้ายสถานะออฟไลน์และแถบรีเฟรชอัปเดตภาษาไทย
+- **Phase 2 — แผนที่ WebGL + Smart Clustering & โหมดฉุกเฉิน SOS (`map.html`, `assets/map.js`, `data/station-coords.json`, `tools/verify-coords.mjs`):**
+  - แยกโครงสร้างพิกัดเสริม Read-Only `data/station-coords.json` (Zero Hallucination) พร้อมสคริปต์ตรวจสอบ `tools/verify-coords.mjs`
+  - ถอด Leaflet blocking script และเปลี่ยนเป็น **Lazy-Loaded MapLibre GL JS (WebGL)** พร้อม Smart Clustering, Dual Theme sync, WebGL/Offline Graceful Fallback, และเครือข่ายสถานีตำรวจข้างเคียง
+  - เพิ่ม **โหมดเร่งด่วน (Citizen & Field Officer SOS Mode):** ปุ่มโทรสายด่วน 191/1599, GPS high-accuracy, Multi-Source Police Lookup (Overpass API + Nominatim + Thai-Latin matching) และ **Jurisdiction-First Guarantee** แสดงสถานีเจ้าของเขตอำนาจพร้อมป้าย `เขตอำนาจพื้นที่นี้` + ปุ่มโทร/นำทาง 1 คลิก
+- **Phase 3 — Modern Web UX, WCAG AAA & Dynamic Share Preview (`assets/styles.css`, `assets/app.js`, `worker.js`, `qr-poster.html`):**
+  - เพิ่ม Cross-Document View Transitions API (`@view-transition { navigation: auto; }`, เคารพ `prefers-reduced-motion`) และ WCAG AAA `:focus-visible` contrast ring
+  - เพิ่ม Web Share API (`#dShare`, `#jurShareBtn`) พร้อม fallback คัดลอกลิงก์ และ Deep-Link `?id=<station_id>`
+  - เพิ่ม Dynamic OpenGraph Card (`GET /og` SVG `1200×630` Edge-cached 24 ชม.) + Dynamic OG/Twitter Meta Middleware บน `worker.js`
+- **Phase 4 — Edge AI Strict Legal RAG & Data Ops (`worker.js`, `wrangler.jsonc`, `jurisdiction.html`, `index.html`, `tools/index-vectorize.mjs`, `tools/d1-schema.sql`, `tools/qa-verify.mjs`):**
+  - เพิ่ม `POST /api/ai-search` (Workers AI + Vectorize + Daily Quota Guard ใน D1 + Post-Verification Guard กรอง hallucinated station/citation ทิ้ง 100% + Graceful Fallback) และสคริปต์ `tools/index-vectorize.mjs` (440 หน้า → 603 chunks)
+  - เพิ่มแท็บที่ 3 **"ผู้ช่วย AI ราชกิจจานุเบกษา"** (`jtab=ai`) + ค้นหาด้วยเสียง `th-TH` + ปุ่มเปิด PDF ราชกิจจานุเบกษาตรงหน้า (`#page=N`) + Client-Side Fallback อัตโนมัติ
+  - เพิ่ม `POST /api/report` (D1 `correction_reports` + Honeypot + `mailto:` fallback) และ Light Report Modal (`#reportModal`)
+  - เพิ่มชุดสคริปต์ QA อัตโนมัติก่อน Release (`tools/qa-verify.mjs`) ครบ 5 หมวด และ `.assetsignore` สำหรับ Cloudflare Workers
+
+### หมายเหตุข้อมูล (สำคัญ)
+- **ข้อมูลสถานีและเขตอำนาจไม่ถูกแก้ไขแม้แต่รายการเดียว** — `git diff origin/main -- data/stations.js data/stations.json data/jurisdictions.js docs/gazette/` ว่างเปล่า 100% (`1,484` สถานีครบ `77` จังหวัด และ `1,372` สถานี / `7,253` รายการตำบล)
+
 ## v1.6.0 — 19 พฤศจิกายน 2569 · ผสานระบบครบทุกหน้า + แผนที่ สภ.ใกล้ฉัน & เขตอำนาจ + โลโก้ตำรวจใหม่
 
 ### ภาพรวม

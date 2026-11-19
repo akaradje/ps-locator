@@ -15,7 +15,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <link rel="stylesheet" href="assets/styles.css">
 <script>
 (function () {
@@ -188,6 +187,14 @@
     <div id="inline-status" class="inline-status" role="status" aria-live="polite"></div>
 
     <div class="idle-actions map-idle-actions" id="mapIdleActions" aria-label="ทางลัดค้นหาบนแผนที่">
+      <button type="button" class="idle-pill idle-pill-sos" id="idleSosBtn" aria-label="เปิดโหมดเร่งด่วน SOS หาสถานีตำรวจใกล้ฉันที่สุด">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        โหมดเร่งด่วน (SOS — หา สภ.ใกล้ฉันที่สุด)
+      </button>
       <button type="button" class="idle-pill idle-pill-primary" id="idleGpsBtn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3"></circle>
@@ -195,6 +202,9 @@
           <circle cx="12" cy="12" r="8"></circle>
         </svg>
         หา สภ./สน. ใกล้ฉัน (GPS)
+      </button>
+      <button type="button" class="idle-pill" id="idleExploreMapBtn">
+        เปิดแผนที่ทั่วประเทศ
       </button>
       <a class="idle-pill" href="jurisdiction.html">ตรวจเขตอำนาจจากชื่อตำบล</a>
       <a class="idle-pill" href="index.html">ค้นหาในสารบบ 1,484 สถานี</a>
@@ -205,11 +215,13 @@
     <div class="panel-glass results-list-panel">
       <div class="panel-header">
         <span id="results-label">สภ./สน. ใกล้ตำแหน่งนี้ &amp; เขตอำนาจ</span>
-        <span id="source-badge" class="source-tag">LIVE · OSM</span>
+        <span id="source-badge" class="source-tag">WEBGL · OSM</span>
       </div>
       <div class="results-scroll" id="mapSideScroll">
+        <div id="sosPanel" class="map-section sos-panel" role="region" aria-label="โหมดเร่งด่วน SOS" hidden></div>
         <div id="mapJurBox" class="map-section" hidden></div>
         <div id="nearbyStationsBox" class="map-section" hidden></div>
+        <div id="neighborStationsBox" class="map-section" hidden></div>
         <div id="results-list" class="map-section"></div>
       </div>
     </div>
@@ -223,6 +235,14 @@
       <div class="hud-top-bar">
         <div id="active-coord-chip" class="hud-chip">LAT — · LON —</div>
         <div class="hud-top-actions">
+          <button type="button" id="sosBtn" class="hud-action-btn hud-sos-btn" aria-pressed="false" title="โหมดเร่งด่วน SOS หา สภ.ใกล้ฉันที่สุด">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>โหมดเร่งด่วน (SOS)</span>
+          </button>
           <button type="button" id="copy-coord-btn" class="hud-action-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -242,7 +262,7 @@
 
       <div class="hud-bottom-bar">
         <span id="active-place-chip" class="hud-chip hud-place-chip">เลือกจุดหมายหรือคลิกบนแผนที่เพื่อล็อกพิกัด</span>
-        <span class="hud-attribution">© OpenStreetMap · Nominatim</span>
+        <span class="hud-attribution">© OpenStreetMap · MapLibre GL</span>
       </div>
     </div>
   </section>
@@ -255,8 +275,8 @@
   </footer>
 </main>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script src="data/stations.js"></script>
 <script src="assets/map.js"></script>
+<script src="assets/offline-db.js" defer></script>
 </body>
 </html>

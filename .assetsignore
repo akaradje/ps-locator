@@ -1,0 +1,17 @@
+.git
+.gitignore
+.previews
+.wrangler
+tools
+worker.js
+wrangler.jsonc
+AGENTS.md
+CHANGELOG.md
+PROJECT_STATUS.md
+README.md
+*.zip
+*.ndjson
+*.ps1
+*.py
+*.mjs
+*.sql
