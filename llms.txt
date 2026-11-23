@@ -6,6 +6,8 @@
 - **สถานีตำรวจทั่วประเทศ (Police Stations):** 1,484 แห่ง ครบทั้ง 77 จังหวัด 10 กองบัญชาการ อ้างอิงข้อมูลสาธารณะจากสำนักงานตำรวจแห่งชาติ (`royalthaipolice.go.th`)
 - **เขตอำนาจสอบสวน (Investigative Jurisdiction):** ดัชนีค้นหา สภ./สน. ผู้รับผิดชอบจากชื่อตำบล/แขวง ถอดข้อความจากประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษา (ลงวันที่ 22 มีนาคม 2567 และฉบับที่ 2 ลงวันที่ 22 ตุลาคม 2568)
 - **แผนที่และสถานีใกล้ฉัน (Interactive Map & Nearest Station):** ค้นหา สภ./สน. ใกล้ตำแหน่งปัจจุบัน (GPS) พร้อมพิกัดและเส้นทางนำทาง
+- **สถาบันการเงิน e-Money และคริปโต (Thai Financial Institutions & SEC Crypto):** 96 แห่ง ครบ 7 หมวด (ธนาคารพาณิชย์ไทย, ธนาคารรัฐ, Virtual Bank เช่น CLICX Bank / BankX, e-Money เช่น TrueMoney / LINE Pay, ผู้ประกอบธุรกิจสินทรัพย์ดิจิทัลที่ได้รับใบอนุญาต ก.ล.ต. 12 ราย, ธนาคารต่างประเทศ และนอนแบงก์)
+- **หน่วยงานราชการทั่วประเทศไทย (Thai Government Agencies):** 28,315 หน่วยงาน อ้างอิงข้อมูลเปิดภาครัฐ (สพร. DGA / CITIZENinfo, กรมราชทัณฑ์, ป.ป.ช., ศาลปกครอง, สำนักงานเขต กทม. และ กปภ.) ครอบคลุม 31 กระทรวง/กลุ่มสังกัด และท้องถิ่น (อบจ./เทศบาล/อบต./เขต)
 
 ## โครงสร้าง URL หลัก (Canonical URL Patterns)
 - `https://ps-locator.prajamwan.workers.dev/` — หน้าหลักค้นหาสถานีตำรวจ 1,484 แห่ง (รองรับ `?q=`, `?province=`, `?region=`, `?id=`)
@@ -14,7 +16,9 @@
 - `https://ps-locator.prajamwan.workers.dev/station/{id}` — หน้าข้อมูลรายสถานี (ที่อยู่, โทรศัพท์, โทรสาร, เว็บไซต์ทางการ, สังกัดกองบัญชาการ, JSON-LD `PoliceStation`)
 - `https://ps-locator.prajamwan.workers.dev/jurisdiction` — ตรวจสอบเขตอำนาจสอบสวนจากชื่อตำบล/แขวง และค้นหาประกาศฉบับเต็ม (รองรับ `?j=`)
 - `https://ps-locator.prajamwan.workers.dev/map` — แผนที่ค้นหา สภ./สน. ใกล้ฉันและตรวจสอบเขตอำนาจตามพิกัด
-- `https://ps-locator.prajamwan.workers.dev/sitemap.xml` — Dynamic Sitemap Index (1,566+ URLs)
+- `https://ps-locator.prajamwan.workers.dev/banks` — สารบบธนาคาร สถาบันการเงิน e-Money และกระดานคริปโตในประเทศไทย 96 แห่ง
+- `https://ps-locator.prajamwan.workers.dev/gov` — สารบบหน่วยงานราชการทั่วประเทศไทย 28,315 แห่ง
+- `https://ps-locator.prajamwan.workers.dev/sitemap.xml` — Dynamic Sitemap Index (1,568+ URLs)
 
 ## หลักความถูกต้องและข้อจำกัดทางกฎหมาย (Accuracy & Legal Disclaimer)
 - **Zero Hallucination:** ฟิลด์ที่ต้นทางไม่มีข้อมูล (45 สถานี) จะแสดง "ไม่มีข้อมูล" โดยไม่แต่งเติมหรือคาดเดา

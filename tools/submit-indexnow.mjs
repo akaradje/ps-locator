@@ -32,6 +32,8 @@ function buildUrlList() {
     `${ORIGIN}/`,
     `${ORIGIN}/jurisdiction`,
     `${ORIGIN}/map`,
+    `${ORIGIN}/banks`,
+    `${ORIGIN}/gov`,
     `${ORIGIN}/provinces`,
     `${ORIGIN}/qr-poster.html`,
   ];

@@ -5,6 +5,8 @@ Allow: /province/
 Allow: /provinces
 Allow: /jurisdiction
 Allow: /map
+Allow: /banks
+Allow: /gov
 Allow: /llms.txt
 Disallow: /api/
 

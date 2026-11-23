@@ -47,7 +47,7 @@ const LEGAL_DISCLAIMER =
   'อาจมีตำบลบางส่วน/เฉพาะหมู่ที่/แนวเขต หรือ 4 สถานีที่ถอดข้อความไม่ครบ โปรดเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมาย';
 
 const SITE_ORIGIN = 'https://ps-locator.prajamwan.workers.dev';
-const SITEMAP_LASTMOD = '2026-11-19';
+const SITEMAP_LASTMOD = '2026-11-23';
 const REGION_ORDER = ['bkk', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
 const SSR_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400';
 const SITEMAP_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400';
@@ -1559,6 +1559,8 @@ ${jsonLdScript}
     </a>
     <nav class="ssr-nav" aria-label="เมนูหลัก">
       <a href="/"${currentNav === 'home' ? ' aria-current="page"' : ''}>สารบบสถานี</a>
+      <a href="/banks"${currentNav === 'banks' ? ' aria-current="page"' : ''}>ธนาคาร</a>
+      <a href="/gov"${currentNav === 'gov' ? ' aria-current="page"' : ''}>ราชการ</a>
       <a href="/provinces"${currentNav === 'provinces' ? ' aria-current="page"' : ''}>77 จังหวัด</a>
       <a href="/jurisdiction"${currentNav === 'jurisdiction' ? ' aria-current="page"' : ''}>เขตอำนาจ</a>
       <a href="/map"${currentNav === 'map' ? ' aria-current="page"' : ''}>แผนที่</a>
@@ -1574,6 +1576,8 @@ ${bodyHtml}
   <div class="ssr-foot-links">
     <a href="/">หน้าหลักค้นหาสถานี</a>
     <a href="/provinces">สารบบ 77 จังหวัด</a>
+    <a href="/banks">สารบบธนาคาร &amp; คริปโต</a>
+    <a href="/gov">หน่วยงานราชการทั่วประเทศ</a>
     <a href="/jurisdiction">ตรวจเขตอำนาจสอบสวน</a>
     <a href="/map">แผนที่ สภ.ใกล้ฉัน</a>
     <a href="/sitemap.xml">Sitemap</a>
@@ -2039,6 +2043,8 @@ function handleSitemapCore(request) {
     { loc: `${SITE_ORIGIN}/`, changefreq: 'weekly', priority: '1.0' },
     { loc: `${SITE_ORIGIN}/jurisdiction`, changefreq: 'monthly', priority: '0.9' },
     { loc: `${SITE_ORIGIN}/map`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${SITE_ORIGIN}/banks`, changefreq: 'weekly', priority: '0.9' },
+    { loc: `${SITE_ORIGIN}/gov`, changefreq: 'weekly', priority: '0.9' },
     { loc: `${SITE_ORIGIN}/provinces`, changefreq: 'monthly', priority: '0.9' },
     { loc: `${SITE_ORIGIN}/qr-poster.html`, changefreq: 'monthly', priority: '0.5' },
   ];
