@@ -3187,6 +3187,266 @@ body.is-sos-mode .hud-sos-btn {
   text-decoration: underline;
 }
 
+/* ============ BANK & E-MONEY DIRECTORY (banks.html) ============ */
+.page-banks .results-list-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 640px;
+}
+
+.page-banks .panel-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.page-banks .tool-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+.page-banks .tool-btn:hover,
+.page-banks .tool-btn[aria-pressed="true"] {
+  border-color: var(--brand);
+  color: var(--brand-ink);
+  background: var(--brand-tint);
+}
+
+.page-banks .region-scroll {
+  flex: none;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+
+.idle-pill-alert {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+html[data-theme="light"] .idle-pill-alert {
+  border-color: rgba(185, 28, 28, 0.35);
+  background: rgba(239, 68, 68, 0.09);
+  color: #b91c1c;
+}
+.idle-pill-alert:hover {
+  border-color: rgba(239, 68, 68, 0.72);
+}
+
+.bank-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.bank-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+.bank-row.is-selected {
+  background: var(--surface-active);
+  border-color: var(--brand-line);
+}
+.bank-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.bank-row-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+.bank-row-code {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand-ink);
+  border: 1px solid var(--brand-line);
+}
+.bank-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 11.5px;
+  color: var(--muted-strong);
+  margin-bottom: 4px;
+}
+.bank-row-fraud {
+  font-family: var(--font-mono);
+  color: #f87171;
+  font-weight: 500;
+}
+html[data-theme="light"] .bank-row-fraud {
+  color: #b91c1c;
+}
+.bank-row-addr {
+  font-size: 12px;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bank-hud-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 520px;
+}
+.bank-hud-body {
+  padding: 6px 20px 16px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+.bank-hud-head {
+  margin-bottom: 14px;
+}
+.bank-code-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand-ink);
+  border: 1px solid var(--brand-line);
+  margin-bottom: 8px;
+}
+.bank-hud-head h2 {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  margin: 0 0 4px;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.bank-legal {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-strong);
+}
+
+.bank-fraud-box {
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.34);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+html[data-theme="light"] .bank-fraud-box {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(185, 28, 28, 0.28);
+}
+.bank-fraud-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #f87171;
+  letter-spacing: 0.03em;
+}
+html[data-theme="light"] .bank-fraud-label { color: #b91c1c; }
+.bank-fraud-val a,
+.bank-fraud-val span {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+}
+.bank-fraud-val a:hover { color: var(--brand-ink); text-decoration: underline; }
+
+.bank-hud-foot {
+  border-top: 1px solid var(--border);
+  padding: 12px 20px 14px;
+  gap: 8px;
+  justify-content: flex-start;
+  pointer-events: auto;
+}
+.bank-hud-foot .btn { pointer-events: auto; }
+
+.bank-aoc-btn {
+  border-color: rgba(239, 68, 68, 0.42);
+  color: #f87171;
+}
+html[data-theme="light"] .bank-aoc-btn {
+  border-color: rgba(185, 28, 28, 0.35);
+  color: #b91c1c;
+}
+
+@media (max-width: 900px) {
+  .page-banks .results-list-panel { max-height: 320px; }
+  .bank-hud-panel { min-height: 360px; }
+}
+
+.gov-ministry-bar {
+  flex: none;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.gov-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--field);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+.gov-select:focus { outline: none; border-color: var(--brand); }
+.gov-pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.gov-pager:empty { display: none; }
+.gov-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .top-chrome { padding: 10px 10px; gap: 6px; }
+  .brand-link span { display: none; }
+  .brand-link { padding: 2px; }
+  .chrome-actions { min-width: 0; gap: 6px; }
+  .nav-pills { gap: 4px; overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 92px); }
+  .nav-pills::-webkit-scrollbar { display: none; }
+  .nav-pill { padding: 5px 8px; font-size: 11.5px; white-space: nowrap; flex: none; }
+  .bank-hud-foot {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bank-hud-foot .btn-primary { grid-column: 1 / -1; }
+  .bank-hud-foot .btn { justify-content: center; }
+}
+
 /* ============ A4 PRINT ============ */
 #print-area { display: none; }
 .print-sheet { font-family: var(--font-sans); color: #000; background: #fff; }
