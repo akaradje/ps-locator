@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'v2.1.2-voice';
+const CACHE_VERSION = 'v2.3.0-ultimate-seo';
 const SHELL_CACHE = 'ps-locator-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'ps-locator-data-' + CACHE_VERSION;
 
@@ -162,6 +162,8 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/provinces/') ||
     url.pathname.startsWith('/province/') ||
     url.pathname.startsWith('/station/') ||
+    url.pathname.startsWith('/tambon/') ||
+    url.pathname.startsWith('/bank/') ||
     url.pathname.startsWith('/sitemap') ||
     url.pathname === '/llms.txt'
   ) {

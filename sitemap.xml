@@ -1,15 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
-    <loc>https://ps-locator.prajamwan.workers.dev/sitemap-core.xml</loc>
+    <loc>https://kadeehub.online/sitemap-core.xml</loc>
     <lastmod>2026-11-23</lastmod>
   </sitemap>
   <sitemap>
-    <loc>https://ps-locator.prajamwan.workers.dev/sitemap-provinces.xml</loc>
+    <loc>https://kadeehub.online/sitemap-provinces.xml</loc>
     <lastmod>2026-11-23</lastmod>
   </sitemap>
   <sitemap>
-    <loc>https://ps-locator.prajamwan.workers.dev/sitemap-stations.xml</loc>
+    <loc>https://kadeehub.online/sitemap-stations.xml</loc>
+    <lastmod>2026-11-23</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://kadeehub.online/sitemap-banks.xml</loc>
+    <lastmod>2026-11-23</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://kadeehub.online/sitemap-tambons-1.xml</loc>
+    <lastmod>2026-11-23</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://kadeehub.online/sitemap-tambons-2.xml</loc>
     <lastmod>2026-11-23</lastmod>
   </sitemap>
 </sitemapindex>

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /* ============================================================
-   PS Locator — IndexNow Fast-Indexing Submitter
-   ส่ง URL หลัก + 77 จังหวัด + 1,484 สถานี ไปยัง api.indexnow.org
+   KadeeHub (PS Locator) — IndexNow Fast-Indexing Submitter
+   ส่ง URL หลัก + 77 จังหวัด + 1,484 สถานี + 96 ธนาคาร + ~7,034 ตำบล ไปยัง api.indexnow.org
    การใช้งาน:
      node tools/submit-indexnow.mjs --dry-run
      node tools/submit-indexnow.mjs
+     node tools/submit-indexnow.mjs --host kadeehub.online
    ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,7 +15,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
-const HOST = 'ps-locator.prajamwan.workers.dev';
+function resolveHostArg() {
+  const idx = process.argv.indexOf('--host');
+  if (idx !== -1 && process.argv[idx + 1]) {
+    return String(process.argv[idx + 1]).trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  }
+  const eqArg = process.argv.find((a) => a.startsWith('--host='));
+  if (eqArg) {
+    return eqArg.slice('--host='.length).trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  }
+  return 'kadeehub.online';
+}
+
+const HOST = resolveHostArg();
 const ORIGIN = `https://${HOST}`;
 const KEY = 'pslocator2026indexnowkey8a7f3c91';
 const KEY_LOCATION = `${ORIGIN}/${KEY}.txt`;
@@ -26,6 +39,32 @@ function buildUrlList() {
   const stations = JSON.parse(fs.readFileSync(stationsPath, 'utf8'));
   if (!Array.isArray(stations) || !stations.length) {
     throw new Error('ไม่สามารถอ่านข้อมูลสถานีจาก data/stations.json ได้');
+  }
+
+  const banksPath = path.join(ROOT, 'data', 'banks.json');
+  const banks = fs.existsSync(banksPath) ? JSON.parse(fs.readFileSync(banksPath, 'utf8')) : [];
+
+  const jurPath = path.join(ROOT, 'data', 'jurisdictions.js');
+  const tambonPairMap = new Map();
+  if (fs.existsSync(jurPath)) {
+    const rawJur = fs.readFileSync(jurPath, 'utf8');
+    const eqIdx = rawJur.indexOf('=');
+    if (eqIdx !== -1) {
+      const jur = JSON.parse(rawJur.slice(eqIdx + 1).replace(/;\s*$/, '').trim());
+      const records = Array.isArray(jur && jur.stations) ? jur.stations : [];
+      for (const rec of records) {
+        const prov = String((rec && rec.province) || '').trim();
+        const tbs = Array.isArray(rec && rec.tambons) ? rec.tambons : [];
+        for (const tb of tbs) {
+          const name = String((tb && tb.name) || '').trim();
+          if (!prov || !name) continue;
+          const key = `${prov}\0${name}`;
+          if (!tambonPairMap.has(key)) {
+            tambonPairMap.set(key, { province: prov, tambon: name });
+          }
+        }
+      }
+    }
   }
 
   const coreUrls = [
@@ -50,11 +89,24 @@ function buildUrlList() {
     .filter((st) => st && st.id !== undefined && st.id !== null)
     .map((st) => `${ORIGIN}/station/${encodeURIComponent(st.id)}`);
 
+  const bankUrls = (Array.isArray(banks) ? banks : [])
+    .filter((b) => b && b.id !== undefined && b.id !== null)
+    .map((b) => `${ORIGIN}/bank/${encodeURIComponent(b.id)}`);
+
+  const tambonUrls = Array.from(tambonPairMap.values())
+    .sort((a, b) => {
+      const pCmp = a.province.localeCompare(b.province, 'th');
+      return pCmp !== 0 ? pCmp : a.tambon.localeCompare(b.tambon, 'th');
+    })
+    .map((item) => `${ORIGIN}/tambon/${encodeURIComponent(item.province)}/${encodeURIComponent(item.tambon)}`);
+
   return {
     coreUrls,
     provinceUrls,
     stationUrls,
-    allUrls: [...coreUrls, ...provinceUrls, ...stationUrls],
+    bankUrls,
+    tambonUrls,
+    allUrls: [...coreUrls, ...provinceUrls, ...stationUrls, ...bankUrls, ...tambonUrls],
   };
 }
 
@@ -77,15 +129,17 @@ async function main() {
     throw new Error('เนื้อหาในไฟล์ IndexNow key ไม่ตรงกับชื่อไฟล์');
   }
 
-  const { coreUrls, provinceUrls, stationUrls, allUrls } = buildUrlList();
+  const { coreUrls, provinceUrls, stationUrls, bankUrls, tambonUrls, allUrls } = buildUrlList();
   const batches = chunkArray(allUrls, BATCH_SIZE);
 
-  console.log('=== PS Locator — IndexNow Submitter ===');
+  console.log('=== KadeeHub (PS Locator) — IndexNow Submitter ===');
   console.log(`Host:         ${HOST}`);
   console.log(`Key Location: ${KEY_LOCATION}`);
   console.log(`Core URLs:    ${coreUrls.length}`);
   console.log(`Provinces:    ${provinceUrls.length}`);
   console.log(`Stations:     ${stationUrls.length}`);
+  console.log(`Banks:        ${bankUrls.length}`);
+  console.log(`Tambons:      ${tambonUrls.length}`);
   console.log(`Total URLs:   ${allUrls.length} (${batches.length} batches × ≤${BATCH_SIZE})`);
 
   if (isDryRun) {
@@ -93,6 +147,8 @@ async function main() {
     console.log('  Core:    ', coreUrls[0], '...', coreUrls[coreUrls.length - 1]);
     console.log('  Province:', provinceUrls[0], '...', provinceUrls[provinceUrls.length - 1]);
     console.log('  Station: ', stationUrls[0], '...', stationUrls[stationUrls.length - 1]);
+    console.log('  Bank:    ', bankUrls[0], '...', bankUrls[bankUrls.length - 1]);
+    console.log('  Tambon:  ', tambonUrls[0], '...', tambonUrls[tambonUrls.length - 1]);
     process.exit(0);
   }
 

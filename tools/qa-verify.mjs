@@ -145,8 +145,8 @@ function checkDataIntegrity() {
 
 /* 4) Internal Links & SEO Files Check */
 function checkInternalLinks() {
-  const htmlFiles = ['index.html', 'jurisdiction.html', 'map.html', 'qr-poster.html'];
-  const workerRoutes = new Set(['/provinces', '/jurisdiction', '/map', '/sitemap.xml', '/llms.txt']);
+  const htmlFiles = ['index.html', 'jurisdiction.html', 'map.html', 'banks.html', 'gov.html', 'qr-poster.html'];
+  const workerRoutes = new Set(['/provinces', '/jurisdiction', '/map', '/banks', '/gov', '/sitemap.xml', '/llms.txt']);
   const missing = [];
   let checked = 0;
 
@@ -180,7 +180,9 @@ function checkInternalLinks() {
       if (
         workerRoutes.has(cleanPath) ||
         cleanPath.startsWith('/station/') ||
-        cleanPath.startsWith('/province/')
+        cleanPath.startsWith('/province/') ||
+        cleanPath.startsWith('/tambon/') ||
+        cleanPath.startsWith('/bank/')
       ) {
         continue;
       }

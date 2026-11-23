@@ -1,25 +1,32 @@
-# PS Locator — สารบบสถานีตำรวจทั่วประเทศ (Thailand Police Station Directory)
+# KadeeHub (`https://kadeehub.online`) / PS Locator — สารบบสถานีตำรวจ เขตอำนาจสอบสวน ธนาคาร และหน่วยงานราชการทั่วประเทศไทย
 
-> Official-source directory of all 1,484 Royal Thai Police stations (สน./สภ.) across 77 provinces and 10 regional bureaus (บช.น., ภ.1–ภ.9), plus subdistrict-level investigative jurisdiction lookup derived from the Royal Thai Government Gazette.
+> Official-source directory for Thai police investigators, legal practitioners, and the public: all 1,484 Royal Thai Police stations (สน./สภ.) across 77 provinces, 7,253 subdistrict-level investigative jurisdiction entries (7,034 dedicated tambon pages) from the Royal Thai Government Gazette, 96 Thai financial institutions & SEC-licensed crypto exchanges (with subpoena/document-summons addresses and 24/7 fraud freeze hotlines), and 28,315 Thai government agencies.
+
+## อัตลักษณ์แบรนด์ (Brand Identity)
+- **Primary Brand & Canonical Domain:** KadeeHub (`https://kadeehub.online`) · PS Locator (คดีฮับ / สารบบสถานีตำรวจทั่วประเทศ)
+- **Official Mirror:** `https://ps-locator.prajamwan.workers.dev` (same application; SEO canonical consolidated to `https://kadeehub.online`)
+- **Open-Source Repository:** `https://github.com/akaradje/ps-locator`
 
 ## ขอบเขตข้อมูล (Data Coverage)
-- **สถานีตำรวจทั่วประเทศ (Police Stations):** 1,484 แห่ง ครบทั้ง 77 จังหวัด 10 กองบัญชาการ อ้างอิงข้อมูลสาธารณะจากสำนักงานตำรวจแห่งชาติ (`royalthaipolice.go.th`)
-- **เขตอำนาจสอบสวน (Investigative Jurisdiction):** ดัชนีค้นหา สภ./สน. ผู้รับผิดชอบจากชื่อตำบล/แขวง ถอดข้อความจากประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษา (ลงวันที่ 22 มีนาคม 2567 และฉบับที่ 2 ลงวันที่ 22 ตุลาคม 2568)
-- **แผนที่และสถานีใกล้ฉัน (Interactive Map & Nearest Station):** ค้นหา สภ./สน. ใกล้ตำแหน่งปัจจุบัน (GPS) พร้อมพิกัดและเส้นทางนำทาง
-- **สถาบันการเงิน e-Money และคริปโต (Thai Financial Institutions & SEC Crypto):** 96 แห่ง ครบ 7 หมวด (ธนาคารพาณิชย์ไทย, ธนาคารรัฐ, Virtual Bank เช่น CLICX Bank / BankX, e-Money เช่น TrueMoney / LINE Pay, ผู้ประกอบธุรกิจสินทรัพย์ดิจิทัลที่ได้รับใบอนุญาต ก.ล.ต. 12 ราย, ธนาคารต่างประเทศ และนอนแบงก์)
-- **หน่วยงานราชการทั่วประเทศไทย (Thai Government Agencies):** 28,315 หน่วยงาน อ้างอิงข้อมูลเปิดภาครัฐ (สพร. DGA / CITIZENinfo, กรมราชทัณฑ์, ป.ป.ช., ศาลปกครอง, สำนักงานเขต กทม. และ กปภ.) ครอบคลุม 31 กระทรวง/กลุ่มสังกัด และท้องถิ่น (อบจ./เทศบาล/อบต./เขต)
+- **สถานีตำรวจทั่วประเทศ (Police Stations):** 1,484 แห่ง ครบทั้ง 77 จังหวัด 10 กองบัญชาการ (บช.น., ภ.1–ภ.9) อ้างอิงข้อมูลสาธารณะจากสำนักงานตำรวจแห่งชาติ (`royalthaipolice.go.th`)
+- **เขตอำนาจสอบสวน (Investigative Jurisdiction):** ดัชนี 7,253 รายการ (7,034 หน้าตำบลแยกเฉพาะ) สำหรับค้นหา สภ./สน. ผู้รับผิดชอบจากชื่อตำบล/แขวง ถอดข้อความจากประกาศสำนักงานตำรวจแห่งชาติในราชกิจจานุเบกษา (ลงวันที่ 22 มีนาคม 2567 และฉบับที่ 2 ลงวันที่ 22 ตุลาคม 2568)
+- **สถาบันการเงิน e-Money และคริปโต (Thai Banks & SEC Crypto):** 96 แห่ง ครบ 7 หมวด (ธนาคารพาณิชย์ไทย, ธนาคารเฉพาะกิจของรัฐ, Virtual Bank, e-Money เช่น TrueMoney / LINE Pay / ShopeePay, ผู้ประกอบธุรกิจสินทรัพย์ดิจิทัลที่ได้รับใบอนุญาต ก.ล.ต., ธนาคารต่างประเทศ และ Non-Bank) พร้อมชื่อนิติบุคคล ที่อยู่สำนักงานใหญ่สำหรับส่งหมายเรียกพยานเอกสาร และเบอร์สายด่วนอายัดบัญชี
+- **หน่วยงานราชการทั่วประเทศไทย (Thai Government Agencies):** 28,315 หน่วยงาน อ้างอิงข้อมูลเปิดภาครัฐ สพร. (DGA / data.go.th) ครอบคลุมกระทรวง กรม ท้องถิ่น (อบจ./เทศบาล/อบต./เขต) รัฐวิสาหกิจ องค์การมหาชน มหาวิทยาลัย ศาล และองค์กรอิสระ
+- **แผนที่และสถานีใกล้ฉัน (Interactive Map & Nearest Station):** ค้นหา สภ./สน. ใกล้ตำแหน่งปัจจุบัน (GPS) พร้อมโหมดเร่งด่วน SOS และเส้นทางนำทาง
 
 ## โครงสร้าง URL หลัก (Canonical URL Patterns)
-- `https://ps-locator.prajamwan.workers.dev/` — หน้าหลักค้นหาสถานีตำรวจ 1,484 แห่ง (รองรับ `?q=`, `?province=`, `?region=`, `?id=`)
-- `https://ps-locator.prajamwan.workers.dev/provinces` — สารบบ 77 จังหวัดจัดกลุ่มตาม 10 กองบัญชาการ (HTML Sitemap)
-- `https://ps-locator.prajamwan.workers.dev/province/{province_th}` — รายชื่อสถานีตำรวจครบทุกแห่งในจังหวัดที่ระบุ (เช่น `/province/ชุมพร`)
-- `https://ps-locator.prajamwan.workers.dev/station/{id}` — หน้าข้อมูลรายสถานี (ที่อยู่, โทรศัพท์, โทรสาร, เว็บไซต์ทางการ, สังกัดกองบัญชาการ, JSON-LD `PoliceStation`)
-- `https://ps-locator.prajamwan.workers.dev/jurisdiction` — ตรวจสอบเขตอำนาจสอบสวนจากชื่อตำบล/แขวง และค้นหาประกาศฉบับเต็ม (รองรับ `?j=`)
-- `https://ps-locator.prajamwan.workers.dev/map` — แผนที่ค้นหา สภ./สน. ใกล้ฉันและตรวจสอบเขตอำนาจตามพิกัด
-- `https://ps-locator.prajamwan.workers.dev/banks` — สารบบธนาคาร สถาบันการเงิน e-Money และกระดานคริปโตในประเทศไทย 96 แห่ง
-- `https://ps-locator.prajamwan.workers.dev/gov` — สารบบหน่วยงานราชการทั่วประเทศไทย 28,315 แห่ง
-- `https://ps-locator.prajamwan.workers.dev/sitemap.xml` — Dynamic Sitemap Index (1,568+ URLs)
+- `https://kadeehub.online/` — หน้าหลักค้นหาสถานีตำรวจ 1,484 แห่ง (รองรับ `?q=`, `?province=`, `?region=`, `?id=`)
+- `https://kadeehub.online/provinces` — สารบบ 77 จังหวัดจัดกลุ่มตาม 10 กองบัญชาการ (HTML Sitemap)
+- `https://kadeehub.online/province/{province_th}` — รายชื่อสถานีตำรวจครบทุกแห่งในจังหวัดที่ระบุ (เช่น `/province/ชุมพร`)
+- `https://kadeehub.online/station/{id}` — หน้าข้อมูลรายสถานี (1,484 หน้า: ที่อยู่, โทรศัพท์, โทรสาร, เว็บไซต์, ตำบลในเขตรับผิดชอบ, JSON-LD `PoliceStation` + `FAQPage`)
+- `https://kadeehub.online/tambon/{province_th}/{tambon_th}` — หน้าตรวจเขตอำนาจสอบสวนรายตำบล (7,034 หน้า: สภ.ผู้รับผิดชอบ, เลขหน้า PDF ราชกิจจานุเบกษา, ป้ายเตือนเขตบางส่วน/แนวเขต, สถานีเพื่อนบ้านส่งหมาย, JSON-LD `GovernmentService` + `FAQPage`)
+- `https://kadeehub.online/bank/{id}` — หน้าข้อมูลส่งหมายเรียกพยานเอกสารและอายัดบัญชีรายสถาบันการเงิน/คริปโต (96 หน้า: ชื่อนิติบุคคล, ที่อยู่สำนักงานใหญ่, สายด่วนอายัดบัญชี, JSON-LD `FinancialService` + `FAQPage`)
+- `https://kadeehub.online/jurisdiction` — ตรวจสอบเขตอำนาจสอบสวนจากชื่อตำบล/แขวง ค้นหาประกาศฉบับเต็ม และผู้ช่วย AI ราชกิจจานุเบกษา (รองรับ `?j=`)
+- `https://kadeehub.online/map` — แผนที่ค้นหา สภ./สน. ใกล้ฉันและตรวจสอบเขตอำนาจตามพิกัด
+- `https://kadeehub.online/banks` — สารบบธนาคาร สถาบันการเงิน e-Money และคริปโต 96 แห่ง
+- `https://kadeehub.online/gov` — สารบบหน่วยงานราชการทั่วประเทศไทย 28,315 แห่ง
+- `https://kadeehub.online/sitemap.xml` — Dynamic Sitemap Index (6 Sitemaps ย่อย รวม 8,698+ URLs)
 
 ## หลักความถูกต้องและข้อจำกัดทางกฎหมาย (Accuracy & Legal Disclaimer)
-- **Zero Hallucination:** ฟิลด์ที่ต้นทางไม่มีข้อมูล (45 สถานี) จะแสดง "ไม่มีข้อมูล" โดยไม่แต่งเติมหรือคาดเดา
+- **Zero Hallucination:** ฟิลด์ที่ต้นทางไม่มีข้อมูล (เช่น 45 สถานีที่ต้นทางไม่ระบุที่อยู่) จะแสดง "ไม่มีข้อมูล" และไม่ใส่ค่าแต่งเติมใน JSON-LD
 - **Legal Notice:** ข้อมูลเขตอำนาจสอบสวนถอดข้อความจากไฟล์ PDF ราชกิจจานุเบกษา (มี 4 สถานีที่ถอดข้อความไม่ครบ และบางพื้นที่เป็นเขตบางส่วน/เฉพาะหมู่ที่/แนวเขต) โปรดตรวจสอบประกาศราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนใช้ดำเนินการทางกฎหมายหรือส่งเอกสารทางคดี

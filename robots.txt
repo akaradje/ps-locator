@@ -3,11 +3,13 @@ Allow: /
 Allow: /station/
 Allow: /province/
 Allow: /provinces
-Allow: /jurisdiction
-Allow: /map
+Allow: /tambon/
+Allow: /bank/
 Allow: /banks
 Allow: /gov
+Allow: /jurisdiction
+Allow: /map
 Allow: /llms.txt
 Disallow: /api/
 
-Sitemap: https://ps-locator.prajamwan.workers.dev/sitemap.xml
+Sitemap: https://kadeehub.online/sitemap.xml
