@@ -47,10 +47,7 @@ const LEGAL_DISCLAIMER =
   'อาจมีตำบลบางส่วน/เฉพาะหมู่ที่/แนวเขต หรือ 4 สถานีที่ถอดข้อความไม่ครบ โปรดเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมาย';
 
 const SITE_ORIGIN = 'https://ps-locator.prajamwan.workers.dev';
-<<<<<<< HEAD
 const SITEMAP_LASTMOD = '2026-11-23';
-=======
-const SITEMAP_LASTMOD = '2026-11-19';
 
 function resolveSiteOrigin(request) {
   try {
@@ -61,7 +58,6 @@ function resolveSiteOrigin(request) {
   } catch { /* ignore */ }
   return SITE_ORIGIN;
 }
->>>>>>> dec1cb2 (Config: add custom domains kadeehub.online and www.kadeehub.online while keeping workers.dev)
 const REGION_ORDER = ['bkk', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
 const SSR_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400';
 const SITEMAP_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400';
