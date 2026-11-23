@@ -4,6 +4,17 @@
   "main": "worker.js",
   "compatibility_date": "2026-11-17",
   "account_id": "74451318eb3c73358e60351ee92691e5",
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "kadeehub.online",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.kadeehub.online",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": ".",
     "binding": "ASSETS"

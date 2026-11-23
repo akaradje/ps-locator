@@ -47,7 +47,21 @@ const LEGAL_DISCLAIMER =
   'อาจมีตำบลบางส่วน/เฉพาะหมู่ที่/แนวเขต หรือ 4 สถานีที่ถอดข้อความไม่ครบ โปรดเปิดไฟล์ PDF ราชกิจจานุเบกษาฉบับจริงและยืนยันกับสถานีตำรวจต้นทางก่อนดำเนินการทางกฎหมาย';
 
 const SITE_ORIGIN = 'https://ps-locator.prajamwan.workers.dev';
+<<<<<<< HEAD
 const SITEMAP_LASTMOD = '2026-11-23';
+=======
+const SITEMAP_LASTMOD = '2026-11-19';
+
+function resolveSiteOrigin(request) {
+  try {
+    const h = new URL(request.url).hostname.toLowerCase();
+    if (h === 'kadeehub.online' || h === 'www.kadeehub.online') {
+      return 'https://kadeehub.online';
+    }
+  } catch { /* ignore */ }
+  return SITE_ORIGIN;
+}
+>>>>>>> dec1cb2 (Config: add custom domains kadeehub.online and www.kadeehub.online while keeping workers.dev)
 const REGION_ORDER = ['bkk', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
 const SSR_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400';
 const SITEMAP_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400';
@@ -1634,6 +1648,7 @@ function renderNotFoundPage(method, heading, detail) {
 }
 
 async function handleStationPage(request, env, rawId) {
+  const siteOrigin = resolveSiteOrigin(request);
   const id = String(rawId || '').trim();
   const { byId, byProvince } = await getStations(env, request.url);
   const st = id ? byId.get(id) : null;
@@ -1658,9 +1673,9 @@ async function handleStationPage(request, env, rawId) {
   const faxDisplay = faxRaw ? formatPhone(faxRaw) : 'ไม่มีข้อมูล';
   const telHref = phoneRaw ? phoneTelHref(phoneRaw) : '';
 
-  const canonical = `${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`;
-  const provinceUrl = `${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`;
-  const ogImage = `${SITE_ORIGIN}/assets/og-cover-v2.png?v=2`;
+  const canonical = `${siteOrigin}/station/${encodeURIComponent(st.id)}`;
+  const provinceUrl = `${siteOrigin}/province/${encodeURIComponent(prov)}`;
+  const ogImage = `${siteOrigin}/assets/og-cover-v2.png?v=2`;
 
   const title = `ที่อยู่ เบอร์โทร ${st.name} (${prov}) | PS Locator`;
   const description = `${st.name} จังหวัด${prov} สังกัด${regionFull} · ที่อยู่: ${addrDisplay} · โทรศัพท์: ${phoneDisplay} · พร้อมนำทาง Google Maps และพิมพ์แนบเอกสารคดี A4`;
@@ -1691,8 +1706,8 @@ async function handleStationPage(request, env, rawId) {
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${SITE_ORIGIN}/` },
-          { '@type': 'ListItem', position: 2, name: '77 จังหวัด', item: `${SITE_ORIGIN}/provinces` },
+          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${siteOrigin}/` },
+          { '@type': 'ListItem', position: 2, name: '77 จังหวัด', item: `${siteOrigin}/provinces` },
           { '@type': 'ListItem', position: 3, name: `จังหวัด${prov}`, item: provinceUrl },
           { '@type': 'ListItem', position: 4, name: st.name, item: canonical },
         ],
@@ -1819,9 +1834,10 @@ async function handleProvincePage(request, env, rawProv) {
     );
   }
 
+  const siteOrigin = resolveSiteOrigin(request);
   const regionCode = list[0].region || '';
   const regionFull = REGION_NAME[regionCode] || REGION_SHORT[regionCode] || 'สำนักงานตำรวจแห่งชาติ';
-  const canonical = `${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`;
+  const canonical = `${siteOrigin}/province/${encodeURIComponent(prov)}`;
   const title = `สถานีตำรวจจังหวัด${prov} (${list.length} แห่ง) — ที่อยู่ เบอร์โทร สภ./สน. | PS Locator`;
   const description = `รวมรายชื่อสถานีตำรวจในจังหวัด${prov} ครบ ${list.length} แห่ง สังกัด${regionFull} พร้อมที่อยู่ เบอร์โทรศัพท์ โทรสาร แผนที่นำทาง และตรวจเขตอำนาจสอบสวน`;
 
@@ -1843,14 +1859,14 @@ async function handleProvincePage(request, env, rawProv) {
           '@type': 'ListItem',
           position: idx + 1,
           name: st.name,
-          url: `${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`,
+          url: `${siteOrigin}/station/${encodeURIComponent(st.id)}`,
         })),
       },
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${SITE_ORIGIN}/` },
-          { '@type': 'ListItem', position: 2, name: '77 จังหวัด', item: `${SITE_ORIGIN}/provinces` },
+          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${siteOrigin}/` },
+          { '@type': 'ListItem', position: 2, name: '77 จังหวัด', item: `${siteOrigin}/provinces` },
           { '@type': 'ListItem', position: 3, name: `จังหวัด${prov}`, item: canonical },
         ],
       },
@@ -1942,8 +1958,9 @@ async function handleProvincePage(request, env, rawProv) {
 }
 
 async function handleProvincesPage(request, env) {
+  const siteOrigin = resolveSiteOrigin(request);
   const { list, byProvince, provincesByRegion } = await getStations(env, request.url);
-  const canonical = `${SITE_ORIGIN}/provinces`;
+  const canonical = `${siteOrigin}/provinces`;
   const title = `สารบบสถานีตำรวจ 77 จังหวัด (${list.length.toLocaleString('th-TH')} แห่ง) | PS Locator`;
   const description = `รวมรายชื่อสถานีตำรวจทั่วประเทศไทยครบทั้ง 77 จังหวัด ${list.length} แห่ง จัดกลุ่มตาม 10 กองบัญชาการ (บช.น. และ ภ.1–ภ.9) พร้อมที่อยู่และเบอร์โทรศัพท์`;
 
@@ -1960,7 +1977,7 @@ async function handleProvincesPage(request, env) {
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${SITE_ORIGIN}/` },
+          { '@type': 'ListItem', position: 1, name: 'สารบบสถานีตำรวจ', item: `${siteOrigin}/` },
           { '@type': 'ListItem', position: 2, name: 'สารบบ 77 จังหวัด', item: canonical },
         ],
       },
@@ -2020,18 +2037,19 @@ async function handleProvincesPage(request, env) {
 }
 
 function handleSitemapIndex(request) {
+  const siteOrigin = resolveSiteOrigin(request);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
-    <loc>${SITE_ORIGIN}/sitemap-core.xml</loc>
+    <loc>${siteOrigin}/sitemap-core.xml</loc>
     <lastmod>${SITEMAP_LASTMOD}</lastmod>
   </sitemap>
   <sitemap>
-    <loc>${SITE_ORIGIN}/sitemap-provinces.xml</loc>
+    <loc>${siteOrigin}/sitemap-provinces.xml</loc>
     <lastmod>${SITEMAP_LASTMOD}</lastmod>
   </sitemap>
   <sitemap>
-    <loc>${SITE_ORIGIN}/sitemap-stations.xml</loc>
+    <loc>${siteOrigin}/sitemap-stations.xml</loc>
     <lastmod>${SITEMAP_LASTMOD}</lastmod>
   </sitemap>
 </sitemapindex>`;
@@ -2039,14 +2057,15 @@ function handleSitemapIndex(request) {
 }
 
 function handleSitemapCore(request) {
+  const siteOrigin = resolveSiteOrigin(request);
   const entries = [
-    { loc: `${SITE_ORIGIN}/`, changefreq: 'weekly', priority: '1.0' },
-    { loc: `${SITE_ORIGIN}/jurisdiction`, changefreq: 'monthly', priority: '0.9' },
-    { loc: `${SITE_ORIGIN}/map`, changefreq: 'monthly', priority: '0.9' },
-    { loc: `${SITE_ORIGIN}/banks`, changefreq: 'weekly', priority: '0.9' },
-    { loc: `${SITE_ORIGIN}/gov`, changefreq: 'weekly', priority: '0.9' },
-    { loc: `${SITE_ORIGIN}/provinces`, changefreq: 'monthly', priority: '0.9' },
-    { loc: `${SITE_ORIGIN}/qr-poster.html`, changefreq: 'monthly', priority: '0.5' },
+    { loc: `${siteOrigin}/`, changefreq: 'weekly', priority: '1.0' },
+    { loc: `${siteOrigin}/jurisdiction`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${siteOrigin}/map`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${siteOrigin}/banks`, changefreq: 'weekly', priority: '0.9' },
+    { loc: `${siteOrigin}/gov`, changefreq: 'weekly', priority: '0.9' },
+    { loc: `${siteOrigin}/provinces`, changefreq: 'monthly', priority: '0.9' },
+    { loc: `${siteOrigin}/qr-poster.html`, changefreq: 'monthly', priority: '0.5' },
   ];
   const body = entries
     .map(
@@ -2066,12 +2085,13 @@ ${body}
 }
 
 async function handleSitemapProvinces(request, env) {
+  const siteOrigin = resolveSiteOrigin(request);
   const { byProvince } = await getStations(env, request.url);
   const provinces = Array.from(byProvince.keys()).sort((a, b) => a.localeCompare(b, 'th'));
   const body = provinces
     .map(
       (prov) => `  <url>
-    <loc>${escapeXml(`${SITE_ORIGIN}/province/${encodeURIComponent(prov)}`)}</loc>
+    <loc>${escapeXml(`${siteOrigin}/province/${encodeURIComponent(prov)}`)}</loc>
     <lastmod>${SITEMAP_LASTMOD}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -2086,11 +2106,12 @@ ${body}
 }
 
 async function handleSitemapStations(request, env) {
+  const siteOrigin = resolveSiteOrigin(request);
   const { list } = await getStations(env, request.url);
   const body = list
     .map(
       (st) => `  <url>
-    <loc>${escapeXml(`${SITE_ORIGIN}/station/${encodeURIComponent(st.id)}`)}</loc>
+    <loc>${escapeXml(`${siteOrigin}/station/${encodeURIComponent(st.id)}`)}</loc>
     <lastmod>${SITEMAP_LASTMOD}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
