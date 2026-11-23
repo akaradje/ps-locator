@@ -1358,13 +1358,13 @@ function thaiDate(d = new Date()) {
 
 function printHeader(title, subtitle) {
   return `<div class="print-sheet">
-    <div class="print-emblem-row">${emblemPrintSVG()}<div><div class="ps-name">PS LOCATOR</div><div class="ps-sub">สารบบสถานีตำรวจทั่วประเทศ</div></div></div>
+    <div class="print-emblem-row">${emblemPrintSVG()}<div><div class="ps-name">KADEEHUB</div><div class="ps-sub">สารบบสถานีตำรวจทั่วประเทศ</div></div></div>
     <div class="print-doc-title">${esc(title)}</div>
     <div class="print-doc-sub">${esc(subtitle)}</div>`;
 }
 
 function printFooter() {
-  return `<div class="print-foot"><span>พิมพ์จาก PS Locator · วันที่พิมพ์ ${esc(thaiDate())}</span></div></div>`;
+  return `<div class="print-foot"><span>พิมพ์จาก KadeeHub (kadeehub.online) · วันที่พิมพ์ ${esc(thaiDate())}</span></div></div>`;
 }
 
 function printStation(st) {
@@ -1823,8 +1823,8 @@ function renderJurResults() {
   $('#jurShareBtn')?.addEventListener('click', () => {
     const shareUrl = jurShareUrl(jurParams.q || R.q, jurParams.tab || 'jur');
     shareOrCopy({
-      title: `เขตอำนาจสอบสวน: ${R.q} — PS Locator`,
-      text: `ผลการตรวจสอบเขตอำนาจสอบสวนสำหรับ “${R.q}” (${R.hits.length + R.addrHits.length} รายการ) — PS Locator`,
+      title: `เขตอำนาจสอบสวน: ${R.q} — KadeeHub`,
+      text: `ผลการตรวจสอบเขตอำนาจสอบสวนสำหรับ “${R.q}” (${R.hits.length + R.addrHits.length} รายการ) — KadeeHub`,
       url: shareUrl,
     });
   });
@@ -2939,7 +2939,7 @@ function bindGlobalEvents() {
       const phoneText = formatPhoneDisplay(st.phone) || 'ไม่มีข้อมูล';
       const addrText = st.address || 'ไม่มีข้อมูล';
       shareOrCopy({
-        title: `${st.name} — PS Locator`,
+        title: `${st.name} — KadeeHub`,
         text: `${st.name} (${st.province_th})\nโทร: ${phoneText}\nที่อยู่: ${addrText}`,
         url: stationShareUrl(st),
       });

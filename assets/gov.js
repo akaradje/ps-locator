@@ -608,7 +608,7 @@
       <div class="print-sheet">
         <div class="print-emblem-row">
           <div>
-            <div class="ps-name">PS LOCATOR — สารบบหน่วยงานของรัฐในประเทศไทย</div>
+            <div class="ps-name">KADEEHUB — สารบบหน่วยงานของรัฐในประเทศไทย</div>
             <div class="ps-sub">ข้อมูลสถานที่ตั้งและช่องทางติดต่อราชการ</div>
           </div>
         </div>
@@ -624,7 +624,7 @@
           <tr><th>เว็บไซต์</th><td>${esc(g.website || 'ไม่มีข้อมูล')}</td></tr>
           <tr><th>ภารกิจหลัก</th><td>${esc(g.mission || 'ไม่มีข้อมูล')}</td></tr>
         </table>
-        <div class="print-foot"><span>พิมพ์จาก PS Locator · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
+        <div class="print-foot"><span>พิมพ์จาก KadeeHub (kadeehub.online) · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
       </div>`;
     window.print();
   }
@@ -645,7 +645,7 @@
       <div class="print-sheet">
         <div class="print-emblem-row">
           <div>
-            <div class="ps-name">PS LOCATOR — บัญชีรายชื่อหน่วยงานของรัฐในประเทศไทย</div>
+            <div class="ps-name">KADEEHUB — บัญชีรายชื่อหน่วยงานของรัฐในประเทศไทย</div>
             <div class="ps-sub">จำนวน ${list.length.toLocaleString('th-TH')} หน่วยงาน${truncated ? ` (พิมพ์เฉพาะ ${MAX_PRINT.toLocaleString('th-TH')} รายการแรก — กรุณากรองจังหวัด/สังกัดหรือส่งออก CSV เพื่อดูทั้งหมด)` : ''}</div>
           </div>
         </div>
@@ -653,7 +653,7 @@
           <thead><tr><th style="width:6%">ลำดับ</th><th style="width:28%">หน่วยงาน / สังกัด</th><th style="width:46%">ที่อยู่</th><th style="width:20%">โทรศัพท์</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        <div class="print-foot"><span>พิมพ์จาก PS Locator · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
+        <div class="print-foot"><span>พิมพ์จาก KadeeHub (kadeehub.online) · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
       </div>`;
     window.print();
   }

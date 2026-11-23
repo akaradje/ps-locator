@@ -198,7 +198,7 @@
       el.setAttribute('role', 'region');
       el.setAttribute('aria-label', 'การอัปเดตแอปพลิเคชัน');
       el.innerHTML =
-        '<span class="ps-sw-update-text">มีเวอร์ชันใหม่ของ PS Locator พร้อมใช้งาน</span>' +
+        '<span class="ps-sw-update-text">มีเวอร์ชันใหม่ของ KadeeHub พร้อมใช้งาน</span>' +
         '<div class="ps-sw-update-actions">' +
           '<button type="button" class="ps-sw-btn-primary" id="psSwRefreshBtn">รีเฟรชเพื่ออัปเดต</button>' +
           '<button type="button" class="ps-sw-btn-dismiss" id="psSwDismissBtn" aria-label="ปิดการแจ้งเตือน">ไว้ทีหลัง</button>' +

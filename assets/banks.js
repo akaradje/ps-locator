@@ -581,7 +581,7 @@
       <div class="print-sheet">
         <div class="print-emblem-row">
           <div>
-            <div class="ps-name">PS LOCATOR — สารบบธนาคารและผู้ให้บริการทางการเงิน</div>
+            <div class="ps-name">KADEEHUB — สารบบธนาคารและผู้ให้บริการทางการเงิน</div>
             <div class="ps-sub">ข้อมูลสำนักงานใหญ่และช่องทางติดต่อประสานงาน</div>
           </div>
         </div>
@@ -596,7 +596,7 @@
           <tr><th>เว็บไซต์ทางการ</th><td>${esc(b.website || 'ไม่มีข้อมูล')}</td></tr>
           <tr><th>หมายเหตุ</th><td>${esc(b.note || 'ไม่มีข้อมูล')}</td></tr>
         </table>
-        <div class="print-foot"><span>พิมพ์จาก PS Locator · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
+        <div class="print-foot"><span>พิมพ์จาก KadeeHub (kadeehub.online) · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
       </div>`;
     window.print();
   }
@@ -615,7 +615,7 @@
       <div class="print-sheet">
         <div class="print-emblem-row">
           <div>
-            <div class="ps-name">PS LOCATOR — บัญชีรายชื่อธนาคารและผู้ให้บริการทางการเงิน</div>
+            <div class="ps-name">KADEEHUB — บัญชีรายชื่อธนาคารและผู้ให้บริการทางการเงิน</div>
             <div class="ps-sub">จำนวน ${list.length} แห่ง</div>
           </div>
         </div>
@@ -623,7 +623,7 @@
           <thead><tr><th style="width:6%">ลำดับ</th><th style="width:26%">สถาบันการเงิน</th><th style="width:46%">ที่อยู่สำนักงานใหญ่</th><th style="width:22%">เบอร์อายัด / โทรศัพท์</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        <div class="print-foot"><span>พิมพ์จาก PS Locator · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
+        <div class="print-foot"><span>พิมพ์จาก KadeeHub (kadeehub.online) · วันที่พิมพ์ ${esc(printDateThai())}</span></div>
       </div>`;
     window.print();
   }

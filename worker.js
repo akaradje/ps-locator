@@ -26,7 +26,7 @@ const REGION_NAME = {
   p9: 'กองบัญชาการตำรวจภูธรภาค 9',
 };
 
-const OG_FOOTER = 'PS Locator · สารบบสถานีตำรวจทั่วประเทศ · โปรดยืนยันกับสถานีก่อนดำเนินการทางกฎหมาย';
+const OG_FOOTER = 'KadeeHub (kadeehub.online) · สารบบสถานีตำรวจทั่วประเทศ · โปรดยืนยันกับสถานีก่อนดำเนินการทางกฎหมาย';
 const HTML_META_PATHS = new Set(['/', '/index.html', '/jurisdiction', '/jurisdiction.html']);
 
 const GAZETTE_DOC_MAP = {
@@ -359,7 +359,7 @@ function findStationByQuery(list, rawQ) {
 
 function renderOgFrame(bodySvg) {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="PS Locator">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="KadeeHub">
   <defs>
     <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0B101B"/>
@@ -387,7 +387,7 @@ function renderOgFrame(bodySvg) {
     <path d="M30 12l3.1 6.3 6.9 1-5 4.9 1.2 6.9L30 27.8 23.8 31.1l1.2-6.9-5-4.9 6.9-1L30 12Z" fill="#C9A227"/>
     <path d="M19 41h22M23 45.5h14" stroke="#F7F6F2" stroke-width="2" stroke-linecap="round"/>
   </g>
-  <text x="172" y="101" fill="#C9A227" font-family="Sarabun, Noto Sans Thai, sans-serif" font-size="20" font-weight="700" letter-spacing="2.4">PS LOCATOR · ROYAL THAI POLICE DIRECTORY</text>
+  <text x="172" y="101" fill="#C9A227" font-family="Sarabun, Noto Sans Thai, sans-serif" font-size="20" font-weight="700" letter-spacing="2.4">KADEEHUB.ONLINE · THAILAND LEGAL &amp; POLICE DIRECTORY</text>
   <text x="172" y="130" fill="#CBD5E1" font-family="Sarabun, Noto Sans Thai, sans-serif" font-size="21" font-weight="500">สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง ครบ 77 จังหวัด</text>
   <rect x="92" y="156" width="1024" height="2" fill="url(#goldLine)"/>
   ${bodySvg}
@@ -442,7 +442,7 @@ function renderDefaultOgSvg(queryHint) {
   const body = `
   <rect x="92" y="188" width="232" height="38" rx="19" fill="#7E1F1A" stroke="#C9A227" stroke-width="1.2"/>
   <text x="208" y="213" text-anchor="middle" fill="#F8FAFC" font-family="Sarabun, Noto Sans Thai, sans-serif" font-size="19" font-weight="700">สารบบสถานีตำรวจ</text>
-  <text x="92" y="294" fill="#FFFFFF" font-family="Noto Serif Thai, Sarabun, sans-serif" font-size="56" font-weight="800">PS Locator</text>
+  <text x="92" y="294" fill="#FFFFFF" font-family="Noto Serif Thai, Sarabun, sans-serif" font-size="56" font-weight="800">KadeeHub</text>
   <text x="92" y="352" fill="#7DD3FC" font-family="Sarabun, Noto Sans Thai, sans-serif" font-size="30" font-weight="600">${escapeXml(sub)}</text>
   <text x="92" y="416" fill="#CBD5E1" font-family="Sarabun, Noto Sans Thai, sans-serif" font-size="24" font-weight="400">ครบทั้ง 1,484 สถานี · 77 จังหวัด · 10 กองบัญชาการ · รองรับพิมพ์ A4 และใช้งานออฟไลน์</text>`;
   return renderOgFrame(body);
@@ -483,9 +483,9 @@ async function buildDynamicMeta(request, env, url) {
 
   if (jParam) {
     return {
-      title: `ตรวจเขตอำนาจสอบสวน: ${jParam} | KadeeHub · PS Locator`,
+      title: `ตรวจเขตอำนาจสอบสวน: ${jParam} | KadeeHub`,
       description: `ตรวจสอบ สภ./สน. ผู้รับผิดชอบสำหรับ “${jParam}” จากประกาศสำนักงานตำรวจแห่งชาติ (โปรดยืนยันกับประกาศฉบับจริงและสถานีต้นทางก่อนดำเนินการทางกฎหมาย)`,
-      ogImage: `${CANONICAL_ORIGIN}/assets/og-jurisdiction-v2.png?v=2`,
+      ogImage: `${CANONICAL_ORIGIN}/assets/og-jurisdiction-v2.png?v=3`,
       ogUrl: canonicalUrl,
     };
   }
@@ -499,17 +499,17 @@ async function buildDynamicMeta(request, env, url) {
       const addr = (st.address || '').trim() || 'ไม่มีข้อมูล';
       const region = REGION_NAME[st.region] || REGION_SHORT[st.region] || '';
       return {
-        title: `${st.name} (${st.province_th}) | KadeeHub · PS Locator`,
+        title: `${st.name} (${st.province_th}) | KadeeHub`,
         description: `ที่อยู่: ${addr} · โทรศัพท์: ${phone}${region ? ' · ' + region : ''}`,
-        ogImage: `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=2`,
+        ogImage: `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=3`,
         ogUrl: canonicalUrl,
       };
     }
     if (qParam) {
       return {
-        title: `ค้นหา “${qParam}” — สารบบสถานีตำรวจทั่วประเทศ | KadeeHub · PS Locator`,
+        title: `ค้นหา “${qParam}” — สารบบสถานีตำรวจทั่วประเทศ | KadeeHub`,
         description: `ผลการค้นหาสถานีตำรวจสำหรับ “${qParam}” จากฐานข้อมูล 1,484 แห่ง 77 จังหวัด`,
-        ogImage: `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=2`,
+        ogImage: `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=3`,
         ogUrl: canonicalUrl,
       };
     }
@@ -1424,7 +1424,7 @@ async function handleAiSearch(request, env) {
       .join('\n\n');
 
     const systemPrompt =
-      'คุณคือผู้ช่วยตรวจสอบเขตอำนาจสอบสวนของระบบ PS Locator ตอบเป็นภาษาไทยเท่านั้น และตอบเป็น JSON วัตถุเดียวโดยเคร่งครัด ' +
+      'คุณคือผู้ช่วยตรวจสอบเขตอำนาจสอบสวนของระบบ KadeeHub (kadeehub.online) ตอบเป็นภาษาไทยเท่านั้น และตอบเป็น JSON วัตถุเดียวโดยเคร่งครัด ' +
       'ห้ามเดาหรือแต่งเติมข้อมูลที่ไม่มีอยู่ในบริบทที่ให้มาเด็ดขาด ' +
       'โครงสร้าง JSON ต้องประกอบด้วยคีย์: ' +
       '{"summary": string, "stations": [{"id": string, "note": string}], "boundary_exceptions": [string], "neighbors": [string], "citations": [{"doc_code": string, "page_number": number}]} ' +
@@ -1641,7 +1641,7 @@ function renderSsrLayout({
   const safeTitle = escapeXml(title);
   const safeDesc = escapeXml(description);
   const safeCanonical = escapeXml(canonical);
-  const safeOgImage = escapeXml(ogImage || `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=2`);
+  const safeOgImage = escapeXml(ogImage || `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=3`);
   const safeRobots = escapeXml(robots);
   const jsonLdScript = jsonLd
     ? `<script type="application/ld+json">${safeJsonLd(jsonLd)}</script>`
@@ -1668,7 +1668,7 @@ function renderSsrLayout({
 </script>
 <meta property="og:type" content="website">
 <meta property="og:locale" content="th_TH">
-<meta property="og:site_name" content="KadeeHub · PS Locator">
+<meta property="og:site_name" content="KadeeHub">
 <meta property="og:url" content="${safeCanonical}">
 <meta property="og:title" content="${safeTitle}">
 <meta property="og:description" content="${safeDesc}">
@@ -1688,7 +1688,7 @@ ${jsonLdScript}
   <div class="ssr-head-in">
     <a class="ssr-brand" href="/">
       <img src="/assets/favicon.svg" width="24" height="24" alt="" aria-hidden="true">
-      <span>KADEEHUB · PS LOCATOR</span>
+      <span>KADEEHUB</span>
     </a>
     <nav class="ssr-nav" aria-label="เมนูหลัก">
       <a href="/"${currentNav === 'home' ? ' aria-current="page"' : ''}>สารบบสถานี</a>
@@ -1705,7 +1705,7 @@ ${jsonLdScript}
 ${bodyHtml}
 </main>
 <footer class="ssr-foot">
-  <div>KadeeHub (PS Locator) — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง ครบ 77 จังหวัด · เขตอำนาจสอบสวน · ธนาคารและหน่วยงานราชการ</div>
+  <div>KadeeHub (kadeehub.online) — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง ครบ 77 จังหวัด · เขตอำนาจสอบสวน · ธนาคารและหน่วยงานราชการ</div>
   <div class="ssr-foot-links">
     <a href="/">หน้าหลักค้นหาสถานี</a>
     <a href="/provinces">สารบบ 77 จังหวัด</a>
@@ -1747,7 +1747,7 @@ function xmlResponse(xml, method) {
 
 function renderNotFoundPage(method, heading, detail) {
   const html = renderSsrLayout({
-    title: `${heading} | KadeeHub · PS Locator`,
+    title: `${heading} | KadeeHub`,
     description: detail,
     canonical: `${CANONICAL_ORIGIN}/`,
     robots: 'noindex, follow',
@@ -1778,7 +1778,7 @@ async function handleStationPage(request, env, rawId) {
     return renderNotFoundPage(
       request.method,
       'ไม่พบข้อมูลสถานีตำรวจที่ระบุ',
-      'ไม่พบรหัสสถานีตำรวจนี้ในฐานข้อมูล 1,484 แห่งของ KadeeHub (PS Locator) กรุณาค้นหาใหม่จากหน้าหลักหรือเลือกจากสารบบ 77 จังหวัด'
+      'ไม่พบรหัสสถานีตำรวจนี้ในฐานข้อมูล 1,484 แห่งของ KadeeHub กรุณาค้นหาใหม่จากหน้าหลักหรือเลือกจากสารบบ 77 จังหวัด'
     );
   }
 
@@ -1797,9 +1797,9 @@ async function handleStationPage(request, env, rawId) {
 
   const canonical = `${CANONICAL_ORIGIN}/station/${encodeURIComponent(st.id)}`;
   const provinceUrl = `${CANONICAL_ORIGIN}/province/${encodeURIComponent(prov)}`;
-  const ogImage = `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=2`;
+  const ogImage = `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=3`;
 
-  const title = `ที่อยู่ เบอร์โทร ${st.name} (${prov}) | KadeeHub · PS Locator`;
+  const title = `ที่อยู่ เบอร์โทร ${st.name} (${prov}) | KadeeHub`;
   const description = `${st.name} จังหวัด${prov} สังกัด${regionFull} · ที่อยู่: ${addrDisplay} · โทรศัพท์: ${phoneDisplay} · พร้อมนำทาง Google Maps ตรวจเขตอำนาจสอบสวน และพิมพ์แนบเอกสารคดี A4`;
 
   /* Zero Hallucination JSON-LD: omit empty fields strictly */
@@ -2065,7 +2065,7 @@ async function handleTambonPage(request, env, rawProv, rawTambon) {
 
   const canonical = `${CANONICAL_ORIGIN}/tambon/${encodeURIComponent(prov)}/${encodeURIComponent(tambon)}`;
   const provinceUrl = `${CANONICAL_ORIGIN}/province/${encodeURIComponent(prov)}`;
-  const ogImage = `${CANONICAL_ORIGIN}/assets/og-jurisdiction-v2.png?v=2`;
+  const ogImage = `${CANONICAL_ORIGIN}/assets/og-jurisdiction-v2.png?v=3`;
 
   const title = `ตำบล${tambon}${amphoeTitlePart} จ.${prov} อยู่ในเขต สภ.ไหน? — เขตอำนาจสอบสวน | KadeeHub`;
   const description = `ตำบล${tambon}${amphoeTitlePart} จังหวัด${prov} อยู่ในเขตอำนาจสอบสวนของ ${stationNamesJoined} · โทรศัพท์: ${primaryPhoneDisplay} · อ้างอิง${pageSummary}${hasPartial ? ' (มีเงื่อนไขเขตบางส่วน/แนวเขต โปรดตรวจประกาศฉบับจริง)' : ''}`;
@@ -2305,7 +2305,7 @@ async function handleBankPage(request, env, rawId) {
     return renderNotFoundPage(
       request.method,
       'ไม่พบข้อมูลสถาบันการเงินที่ระบุ',
-      'ไม่พบรหัสธนาคารหรือผู้ให้บริการทางการเงินนี้ในสารบบ 96 แห่งของ KadeeHub (PS Locator) กรุณาค้นหาใหม่จากหน้าสารบบธนาคาร'
+      'ไม่พบรหัสธนาคารหรือผู้ให้บริการทางการเงินนี้ในสารบบ 96 แห่งของ KadeeHub กรุณาค้นหาใหม่จากหน้าสารบบธนาคาร'
     );
   }
 
@@ -2328,7 +2328,7 @@ async function handleBankPage(request, env, rawId) {
   const fraudHref = fraudRaw ? phoneTelHref(fraudRaw) : '';
 
   const canonical = `${CANONICAL_ORIGIN}/bank/${encodeURIComponent(bank.id)}`;
-  const ogImage = `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=2`;
+  const ogImage = `${CANONICAL_ORIGIN}/assets/og-cover-v2.png?v=3`;
   const title = `ที่อยู่ส่งหมายเรียกพยานเอกสาร & อายัดบัญชี ${name}${code ? ` (${code})` : ''} | KadeeHub`;
   const description = `${legalName || name} · ที่อยู่สำนักงานใหญ่: ${addrDisplay} · โทรศัพท์: ${phoneDisplay} · สายด่วนอายัดบัญชี: ${fraudDisplay} (กรณีเร่งด่วนโทร AOC 1441)`;
 
@@ -2530,7 +2530,7 @@ async function handleProvincePage(request, env, rawProv) {
   const regionCode = list[0].region || '';
   const regionFull = REGION_NAME[regionCode] || REGION_SHORT[regionCode] || 'สำนักงานตำรวจแห่งชาติ';
   const canonical = `${CANONICAL_ORIGIN}/province/${encodeURIComponent(prov)}`;
-  const title = `สถานีตำรวจจังหวัด${prov} (${list.length} แห่ง) — ที่อยู่ เบอร์โทร สภ./สน. | KadeeHub · PS Locator`;
+  const title = `สถานีตำรวจจังหวัด${prov} (${list.length} แห่ง) — ที่อยู่ เบอร์โทร สภ./สน. | KadeeHub`;
   const description = `รวมรายชื่อสถานีตำรวจในจังหวัด${prov} ครบ ${list.length} แห่ง สังกัด${regionFull} พร้อมที่อยู่ เบอร์โทรศัพท์ โทรสาร แผนที่นำทาง และตรวจเขตอำนาจสอบสวน`;
 
   const jsonLd = {
@@ -2652,7 +2652,7 @@ async function handleProvincePage(request, env, rawProv) {
 async function handleProvincesPage(request, env) {
   const { list, byProvince, provincesByRegion } = await getStations(env, request.url);
   const canonical = `${CANONICAL_ORIGIN}/provinces`;
-  const title = `สารบบสถานีตำรวจ 77 จังหวัด (${list.length.toLocaleString('th-TH')} แห่ง) | KadeeHub · PS Locator`;
+  const title = `สารบบสถานีตำรวจ 77 จังหวัด (${list.length.toLocaleString('th-TH')} แห่ง) | KadeeHub`;
   const description = `รวมรายชื่อสถานีตำรวจทั่วประเทศไทยครบทั้ง 77 จังหวัด ${list.length} แห่ง จัดกลุ่มตาม 10 กองบัญชาการ (บช.น. และ ภ.1–ภ.9) พร้อมที่อยู่และเบอร์โทรศัพท์`;
 
   const jsonLd = {
