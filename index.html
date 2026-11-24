@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#05070c">
+<meta name="application-name" content="KadeeHub">
 <meta name="author" content="ผู้ช่วยพนักงานสอบสวน สภ.เมืองชุมพร">
 <title>KadeeHub — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง | เขตอำนาจ ธนาคาร ราชการ</title>
 <meta name="description" content="KadeeHub ค้นหาสถานีตำรวจ (สน./สภ.) ทั่วประเทศไทยครบ 1,484 แห่ง 77 จังหวัด ตรวจเขตอำนาจสอบสวนจากชื่อตำบล สารบบธนาคารและคริปโต 96 แห่ง และหน่วยงานราชการ 28,315 แห่ง ข้อมูลอ้างอิงจากสำนักงานตำรวจแห่งชาติ">
@@ -12,7 +13,12 @@
 <link rel="canonical" href="https://kadeehub.online/">
 <link rel="alternate" hreflang="th" href="https://kadeehub.online/">
 <link rel="alternate" hreflang="x-default" href="https://kadeehub.online/">
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-48.png">
+<link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,28 +55,33 @@
     {
       "@type": "Organization",
       "@id": "https://kadeehub.online/#organization",
-      "name": "KadeeHub — สารบบสถานีตำรวจ เขตอำนาจสอบสวน ธนาคาร และหน่วยงานราชการ",
-      "alternateName": ["KadeeHub", "kadeehub.online", "คดีฮับ", "PS Locator", "สารบบสถานีตำรวจทั่วประเทศ"],
+      "name": "KadeeHub",
+      "alternateName": ["คดีฮับ", "kadeehub.online", "KadeeHub Thailand", "PS Locator"],
       "url": "https://kadeehub.online/",
-      "logo": "https://kadeehub.online/assets/favicon.svg",
+      "description": "KadeeHub (คดีฮับ) ศูนย์รวมข้อมูลงานคดีสำหรับพนักงานสอบสวนและประชาชน — สารบบสถานีตำรวจทั่วประเทศ 1,484 แห่ง ตรวจเขตอำนาจสอบสวนจากชื่อตำบล สารบบธนาคารและคริปโต 96 แห่ง และหน่วยงานราชการ 28,315 แห่ง",
+      "logo": {
+        "@type": "ImageObject",
+        "@id": "https://kadeehub.online/#logo",
+        "url": "https://kadeehub.online/assets/logo-512.png",
+        "contentUrl": "https://kadeehub.online/assets/logo-512.png",
+        "width": 512,
+        "height": 512,
+        "caption": "KadeeHub"
+      },
+      "image": { "@id": "https://kadeehub.online/#logo" },
       "sameAs": [
-        "https://github.com/akaradje/ps-locator",
-        "https://ps-locator.prajamwan.workers.dev"
+        "https://github.com/akaradje/ps-locator"
       ]
     },
     {
       "@type": "WebSite",
       "@id": "https://kadeehub.online/#website",
       "url": "https://kadeehub.online/",
-      "name": "KadeeHub — สารบบสถานีตำรวจ เขตอำนาจสอบสวน ธนาคาร และหน่วยงานราชการ",
-      "alternateName": ["KadeeHub", "kadeehub.online", "คดีฮับ", "PS Locator", "สารบบสถานีตำรวจทั่วประเทศ"],
+      "name": "KadeeHub",
+      "alternateName": ["คดีฮับ", "kadeehub.online", "PS Locator"],
       "inLanguage": "th",
-      "description": "ค้นหาที่อยู่ เบอร์โทร โทรสาร เว็บไซต์ แผนที่นำทางของ สน./สภ. ทั่วประเทศไทย 1,484 แห่ง 77 จังหวัด ตรวจเขตอำนาจสอบสวน สารบบธนาคาร และหน่วยงานราชการ",
+      "description": "KadeeHub ศูนย์รวมข้อมูลงานคดี — ค้นหาที่อยู่ เบอร์โทร โทรสาร เว็บไซต์ แผนที่นำทางของ สน./สภ. ทั่วประเทศไทย 1,484 แห่ง 77 จังหวัด ตรวจเขตอำนาจสอบสวน สารบบธนาคาร และหน่วยงานราชการ",
       "publisher": { "@id": "https://kadeehub.online/#organization" },
-      "sameAs": [
-        "https://github.com/akaradje/ps-locator",
-        "https://ps-locator.prajamwan.workers.dev"
-      ],
       "potentialAction": {
         "@type": "SearchAction",
         "target": "https://kadeehub.online/?q={search_term_string}",
@@ -79,12 +90,14 @@
     },
     {
       "@type": "WebApplication",
-      "name": "KadeeHub — สารบบสถานีตำรวจทั่วประเทศ",
+      "name": "KadeeHub",
+      "alternateName": "KadeeHub — สารบบสถานีตำรวจทั่วประเทศ",
       "url": "https://kadeehub.online/",
       "applicationCategory": "ReferenceApplication",
       "operatingSystem": "All",
       "inLanguage": "th",
-      "isAccessibleForFree": true
+      "isAccessibleForFree": true,
+      "publisher": { "@id": "https://kadeehub.online/#organization" }
     },
     {
       "@type": "Dataset",
@@ -100,6 +113,14 @@
     {
       "@type": "FAQPage",
       "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "KadeeHub (คดีฮับ) คืออะไร?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "KadeeHub (kadeehub.online หรือ คดีฮับ เดิมชื่อ PS Locator) คือเว็บแอปพลิเคชันศูนย์รวมข้อมูลงานคดีสำหรับพนักงานสอบสวนและประชาชน รวบรวมสารบบสถานีตำรวจทั่วประเทศไทย 1,484 แห่ง 77 จังหวัด ระบบตรวจเขตอำนาจสอบสวนจากชื่อตำบล สารบบธนาคารและผู้ให้บริการทางการเงิน 96 แห่ง และสารบบหน่วยงานราชการ 28,315 แห่ง ใช้งานฟรีไม่ต้องติดตั้งแอป"
+          }
+        },
         {
           "@type": "Question",
           "name": "ค้นหาเบอร์โทรและที่อยู่สถานีตำรวจใกล้ฉันได้อย่างไร?",

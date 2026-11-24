@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'v2.4.0-kadeehub';
+const CACHE_VERSION = 'v2.4.1-kadeehub-seo';
 const SHELL_CACHE = 'ps-locator-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'ps-locator-data-' + CACHE_VERSION;
 
@@ -16,11 +16,17 @@ const SHELL_ASSETS = [
   './map.html',
   './qr-poster.html',
   './manifest.webmanifest',
+  './favicon.ico',
   './assets/styles.css',
   './assets/app.js',
   './assets/map.js',
   './assets/offline-db.js',
   './assets/favicon.svg',
+  './assets/favicon-48.png',
+  './assets/favicon-96.png',
+  './assets/icon-192.png',
+  './assets/logo-512.png',
+  './assets/apple-touch-icon.png',
 ];
 
 const DATA_ASSETS = [

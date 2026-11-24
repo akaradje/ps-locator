@@ -1653,13 +1653,19 @@ function renderSsrLayout({
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#05070c">
+<meta name="application-name" content="KadeeHub">
 <title>${safeTitle}</title>
 <meta name="description" content="${safeDesc}">
 <meta name="robots" content="${safeRobots}">
 <link rel="canonical" href="${safeCanonical}">
 <link rel="alternate" hreflang="th" href="${safeCanonical}">
 <link rel="alternate" hreflang="x-default" href="${safeCanonical}">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-48.png">
+<link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=Noto+Serif+Thai:wght@600;700&display=swap" rel="stylesheet">

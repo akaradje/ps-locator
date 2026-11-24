@@ -1,7 +1,7 @@
-# PS Locator — สารบบสถานีตำรวจทั่วประเทศ
+# KadeeHub (PS Locator) — สารบบสถานีตำรวจทั่วประเทศ
 
-เว็บไซต์ค้นหาสถานีตำรวจ (สน./สภ.) สำหรับ **พนักงานสอบสวน เจ้าหน้าที่ตำรวจ และประชาชน**
-ครอบคลุมสถานีตำรวจ **1,484 แห่ง ครบทั้ง 77 จังหวัด** — แสดงที่อยู่ เบอร์โทรศัพท์ โทรสาร เว็บไซต์ทางการ และปุ่มนำทาง (Google Maps) พร้อมพิมพ์รายละเอียดแนบเอกสารคดีได้
+**[KadeeHub](https://kadeehub.online)** (`kadeehub.online` / คดีฮับ — เดิมชื่อ PS Locator) ศูนย์รวมข้อมูลงานคดีสำหรับ **พนักงานสอบสวน เจ้าหน้าที่ตำรวจ และประชาชน**
+ครอบคลุมสถานีตำรวจ **1,484 แห่ง ครบทั้ง 77 จังหวัด**, ระบบตรวจเขตอำนาจสอบสวนจากชื่อตำบล, สารบบธนาคารและคริปโต **96 แห่ง** และหน่วยงานราชการ **28,315 แห่ง** — แสดงที่อยู่ เบอร์โทรศัพท์ โทรสาร เว็บไซต์ทางการ และปุ่มนำทาง (Google Maps) พร้อมพิมพ์รายละเอียดแนบเอกสารคดีได้
 
 **เวอร์ชันปัจจุบัน: v1.3.0** · [ดู Release ทั้งหมด](https://github.com/akaradje/ps-locator/releases) · [รายละเอียดการเปลี่ยนแปลง](CHANGELOG.md) · [สถานะโครงการ](PROJECT_STATUS.md)
 
@@ -26,7 +26,9 @@
 
 ## 🌐 เว็บไซต์ออนไลน์
 
-### **https://ps-locator.prajamwan.workers.dev**
+### **https://kadeehub.online** (KadeeHub)
+
+ลิงก์สำรอง: https://ps-locator.prajamwan.workers.dev
 
 โฮสต์บน **Cloudflare** (Workers static assets — ฟรี ไม่จำกัดปริมาณ พร้อม HTTPS) อัปเดตเว็บได้ด้วยไฟล์ `ps-locator-v1.3.0.zip` จากหน้า Release ผ่าน Cloudflare Dashboard → Workers & Pages → Create application → **Upload your static files** → Deploy
 
