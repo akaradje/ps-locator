@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'v2.4.1-kadeehub-seo';
+const CACHE_VERSION = 'v2.4.2-gtm';
 const SHELL_CACHE = 'ps-locator-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'ps-locator-data-' + CACHE_VERSION;
 
